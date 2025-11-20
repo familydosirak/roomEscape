@@ -10,6 +10,69 @@ if (!sessionId) {
     localStorage.setItem("escapeSessionId", sessionId);
 }
 
+// ✅ 스테이지별 "내 도착 순위" & 문제 캐시
+let stageRanks = {};
+let stageCache = {};
+
+try {
+    const storedRanks = localStorage.getItem("escapeStageRanks");
+    if (storedRanks) {
+        stageRanks = JSON.parse(storedRanks) || {};
+    }
+} catch (e) {
+    stageRanks = {};
+}
+
+try {
+    const storedCache = localStorage.getItem("escapeStageProblems");
+    if (storedCache) {
+        stageCache = JSON.parse(storedCache) || {};
+    }
+} catch (e) {
+    stageCache = {};
+}
+
+function saveStageRanks() {
+    try {
+        localStorage.setItem("escapeStageRanks", JSON.stringify(stageRanks));
+    } catch (e) {
+        console.warn("failed to save ranks", e);
+    }
+}
+
+function saveStageCache() {
+    try {
+        localStorage.setItem("escapeStageProblems", JSON.stringify(stageCache));
+    } catch (e) {
+        console.warn("failed to save cache", e);
+    }
+}
+
+let finishedState = null;
+
+try {
+    const storedFinished = localStorage.getItem("escapeFinishedInfo");
+    if (storedFinished) {
+        finishedState = JSON.parse(storedFinished) || null;
+    }
+} catch (e) {
+    finishedState = null;
+}
+
+function saveFinishedState(state) {
+    finishedState = state;
+    try {
+        if (state) {
+            localStorage.setItem("escapeFinishedInfo", JSON.stringify(state));
+        } else {
+            localStorage.removeItem("escapeFinishedInfo");
+        }
+    } catch (e) {
+        console.warn("failed to save finished state", e);
+    }
+}
+
+
 // 현재 보고 있는 스테이지 (화면에 표시 중인 방 번호)
 let currentStage = 1;
 // 서버 기준으로 "다음에 풀 스테이지" (진행도)
@@ -53,6 +116,12 @@ function showFinishedScreen(data) {
         maxUnlockedStage = data.currentStage;
     }
 
+    saveFinishedState({
+        currentStage: typeof data.currentStage === "number" ? data.currentStage : maxUnlockedStage,
+        message: data.message || "모든 문제를 클리어했습니다!",
+        clearImageUrl: data.clearImageUrl || "/img/clear.png",
+    });
+
     stageInfoEl.textContent = "";
     titleEl.textContent = "게임 클리어!";
 
@@ -92,7 +161,29 @@ function renderProblem(problem, options = {}) {
     finishEl.textContent = "";
 
     currentStage = problem.stage;
-    stageInfoEl.textContent = `현재 스테이지: ${currentStage}`;
+
+    // ✅ 라벨: 내 도착 순위 기준으로 표시
+    const key = String(problem.stage);
+    let rank = problem.arrivalRank;
+
+    // problem에 rank가 없으면 로컬에 저장된 내 순위 사용
+    if ((typeof rank !== "number" || rank <= 0) &&
+        typeof stageRanks[key] === "number" &&
+        stageRanks[key] > 0) {
+        rank = stageRanks[key];
+    }
+
+    let arrivalText = "";
+    if (typeof rank === "number" && rank > 0) {
+        if (rank === 1) {
+            arrivalText = " / 1번째로 도착했어요!";
+        } else {
+            arrivalText = ` / ${rank}번째로 도착했어요!`;
+        }
+    }
+
+    stageInfoEl.textContent = `${problem.stage}번 방입니다.${arrivalText}`;
+
     titleEl.textContent = problem.title || "";
     imgEl.src = problem.imageUrl || "";
     imgEl.style.display = problem.imageUrl ? "block" : "none";
@@ -157,13 +248,28 @@ async function loadProblem(stage) {
             return;
         }
 
+        const problemStage = data.stage;
+        const key = String(problemStage);
+
         const problem = {
-            stage: data.stage,
+            stage: problemStage,
             title: data.title,
             imageUrl: data.imageUrl,
             description: data.description,
             answer: data.answer, // 이미 클리어한 문제의 정답 표시용
         };
+
+        // ✅ 내 도착 순위가 저장돼 있으면 그걸 우선 사용
+        if (typeof stageRanks[key] === "number" && stageRanks[key] > 0) {
+            problem.arrivalRank = stageRanks[key];
+        } else if (typeof data.arrivalRank === "number" && data.arrivalRank > 0) {
+            // 서버에서 내려준 값(첫 진입 시)을 임시로 표시
+            problem.arrivalRank = data.arrivalRank;
+        }
+
+        // ✅ 문제 캐시에 저장
+        stageCache[key] = problem;
+        saveStageCache();
 
         renderProblem(problem, {
             isCleared: !!data.isCleared,
@@ -175,15 +281,60 @@ async function loadProblem(stage) {
     }
 }
 
+// ✅ 캐시 우선으로 스테이지 보여주기
+// ✅ 게임 전체를 이미 클리어했고, 
+//    요청한 stage가 "진행도 이상"이면 클리어 화면으로 간 걸로 판단
+async function showStage(stage) {
+    if (finishedState && typeof maxUnlockedStage === "number") {
+        const clearStage = maxUnlockedStage;
+        if (stage >= clearStage) {
+            showFinishedScreen({
+                currentStage: finishedState.currentStage,
+                message: finishedState.message,
+                clearImageUrl: finishedState.clearImageUrl,
+            });
+            return;
+        }
+    }
+
+    const key = String(stage);
+    const cached = stageCache[key];
+
+    if (cached) {
+        const isCleared = stage < maxUnlockedStage;
+
+        // 캐시에 arrivalRank 없으면 stageRanks에서 보완
+        if ((cached.arrivalRank == null || cached.arrivalRank <= 0) &&
+            typeof stageRanks[key] === "number" &&
+            stageRanks[key] > 0) {
+            cached.arrivalRank = stageRanks[key];
+        }
+
+        renderProblem(cached, {
+            isCleared,
+            currentStageFromServer: maxUnlockedStage,
+        });
+    } else {
+        await loadProblem(stage);
+    }
+}
+
+
 async function submitAnswer() {
     const answer = answerInput.value.trim();
     if (!answer) {
+        resultEl.style.color = "#f97373";
         resultEl.textContent = "정답을 입력해주세요.";
         return;
     }
 
     try {
         submitBtn.disabled = true;
+        answerInput.disabled = true;
+
+        // 버튼 누르자마자 바로 표시
+        resultEl.style.color = "#fbbf24";
+        resultEl.textContent = "정답 확인 중...";
 
         const res = await fetch("/api/answer", {
             method: "POST",
@@ -192,55 +343,100 @@ async function submitAnswer() {
         });
         const data = await res.json();
 
-        submitBtn.disabled = false;
-
+        // 1) 서버 자체 오류 응답
         if (!data.ok) {
+            submitBtn.disabled = false;
+            answerInput.disabled = false;
+
             alert(data.message || "정답 제출 중 오류가 발생했습니다.");
             return;
         }
 
+        // 2) 이미 클리어한 문제에 대한 제출
         if (data.alreadyCleared) {
+            submitBtn.disabled = false;
+            answerInput.disabled = false;
+
             resultEl.style.color = "#4ade80";
             resultEl.textContent =
                 data.message || "이미 클리어한 문제입니다.";
             return;
         }
 
+        // 3) 오답
         if (!data.correct) {
+            submitBtn.disabled = false;
+            answerInput.disabled = false;
+
             resultEl.style.color = "#f97373";
             resultEl.textContent =
                 data.message || "틀렸습니다. 다시 시도해보세요.";
             return;
         }
 
-        // 정답 맞음
+        // 4) 정답
         resultEl.style.color = "#4ade80";
         resultEl.textContent = "정답입니다!";
+
+        // 정답인 경우에는 현재 문제에선 더 이상 입력 못 하게 유지
+        // (다음 문제로 넘어갈 때 renderProblem이 새로 enable 해줌)
 
         if (typeof data.currentStage === "number") {
             maxUnlockedStage = data.currentStage;
         }
 
-        // 서버에서 "이미 다음 문제 데이터"를 내려줌
-        setTimeout(() => {
+        // ✅ 내 도착 순위 저장 (해당 방에 처음 도착했을 때만)
+        if (typeof data.nextStage === "number" && typeof data.arrivalRank === "number") {
+            const key = String(data.nextStage);
+            if (stageRanks[key] == null) {
+                stageRanks[key] = data.arrivalRank;
+                saveStageRanks();
+            }
+        }
+
+        // ✅ 짧게 "정답입니다!" 보여주고 나서 다음 화면으로 이동
+        const goNext = () => {
             if (data.finished) {
                 showFinishedScreen(data);
                 return;
             }
 
             if (data.hasNext && data.nextProblem) {
-                renderProblem(data.nextProblem, {
+                const np = data.nextProblem;
+                const key = String(np.stage);
+
+                const nextProblem = {
+                    stage: np.stage,
+                    title: np.title,
+                    imageUrl: np.imageUrl,
+                    description: np.description,
+                    answer: np.answer,
+                };
+
+                const savedRank = stageRanks[key];
+                if (typeof savedRank === "number" && savedRank > 0) {
+                    nextProblem.arrivalRank = savedRank;
+                }
+
+                stageCache[key] = nextProblem;
+                saveStageCache();
+
+                renderProblem(nextProblem, {
                     isCleared: false,
                     currentStageFromServer: data.currentStage,
                 });
             } else {
-                // 혹시 hasNext 정보가 없으면 안전하게 현재 스테이지 다시 로딩
-                loadProblem(data.nextStage || maxUnlockedStage);
+                // 혹시 hasNext 정보가 없으면 안전하게 캐시/서버 통해 재로딩
+                showStage(data.nextStage || maxUnlockedStage);
             }
-        }, 500);
+        };
+
+        // 🔹 여기 값(예: 400)을 조절해서 보여주는 시간 늘이거나 줄일 수 있음
+        setTimeout(goNext, 1000);
     } catch (e) {
         console.error(e);
         submitBtn.disabled = false;
+        answerInput.disabled = false;
         alert("정답 제출 중 오류가 발생했습니다.");
     }
 }
@@ -250,6 +446,19 @@ async function startGame() {
     startBtn.disabled = true;
 
     try {
+
+        if (finishedState) {
+            mainScreen.classList.add("hidden");
+            gameScreen.classList.remove("hidden");
+
+            showFinishedScreen({
+                currentStage: finishedState.currentStage,
+                message: finishedState.message,
+                clearImageUrl: finishedState.clearImageUrl,
+            });
+            return;
+        }
+
         const res = await fetch(
             `/api/problem?stage=0&sessionId=${encodeURIComponent(sessionId)}`
         );
@@ -298,10 +507,10 @@ prevBtn.addEventListener("click", () => {
         const lastStage = maxUnlockedStage - 1;
         if (lastStage >= 1) {
             isFinished = false;
-            loadProblem(lastStage);
+            showStage(lastStage);
         }
     } else if (currentStage > 1) {
-        loadProblem(currentStage - 1);
+        showStage(currentStage - 1);
     }
 });
 
@@ -309,7 +518,7 @@ nextBtn.addEventListener("click", () => {
     if (isFinished) return;
     const nextStage = currentStage + 1;
     if (nextStage <= maxUnlockedStage) {
-        loadProblem(nextStage);
+        showStage(nextStage);
     }
 });
 
@@ -337,6 +546,14 @@ async function resetGame() {
         currentStage = 1;
         maxUnlockedStage = 1;
         isFinished = false;
+
+        // ✅ 로컬 기록 초기화
+        stageRanks = {};
+        stageCache = {};
+        saveStageRanks();
+        saveStageCache();
+
+        saveFinishedState(null);
 
         finishEl.textContent = "";
         resultEl.textContent = "";

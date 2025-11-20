@@ -18,15 +18,24 @@
     "rewrites": [
       {
         "source": "/api/problem",
-        "function": "problem"
+        "function": {
+          "functionId": "problem",
+          "region": "asia-northeast1"
+        }
       },
       {
         "source": "/api/answer",
-        "function": "answer"
+        "function": {
+          "functionId": "answer",
+          "region": "asia-northeast1"
+        }
       },
       {
         "source": "/api/reset",
-        "function": "reset"
+        "function": {
+          "functionId": "reset",
+          "region": "asia-northeast1"
+        }
       },
       {
         "source": "**",

@@ -3,12 +3,65 @@
 
 const { onRequest } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const problems = require("./problems"); // 분리된 문제 정의
 
 admin.initializeApp();
-const db = admin.firestore();
+const db = getFirestore();
 
 const sessionsRef = db.collection("sessions");
+
+/**
+ * 특정 스테이지에 처음 도착한 순번을 반환한다.
+ * (트랜잭션으로 count를 1 증가시키고, 증가된 값을 rank로 사용)
+ * @param {number} stage
+ * @return {Promise<number>}
+ */
+async function recordStageArrival(stage) {
+    if (!stage) return 0;
+
+    const docRef = db.collection("stageArrivals").doc(String(stage));
+
+    const rank = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(docRef);
+        let count = 0;
+
+        if (snap.exists) {
+            const data = snap.data() || {};
+            count = Number(data.count || 0);
+        }
+
+        const newCount = count + 1;
+
+        tx.set(
+            docRef,
+            {
+                count: newCount,
+                updatedAt: FieldValue.serverTimestamp(),
+
+            },
+            { merge: true },
+        );
+
+        return newCount;
+    });
+
+    return rank;
+}
+
+/**
+ * 특정 스테이지 도착 count 조회 (순번 조회용)
+ */
+async function getStageArrivalRank(stage) {
+    if (!stage) return 0;
+
+    const doc = await db.collection("stageArrivals").doc(String(stage)).get();
+    if (!doc.exists) return 0;
+
+    const data = doc.data() || {};
+    return Number(data.count || 0);
+}
+
 
 /**
  * 세션의 현재 스테이지를 조회한다.
@@ -24,7 +77,7 @@ async function getCurrentStage(sessionId) {
         await sessionsRef.doc(sessionId).set(
             {
                 currentStage: 1,
-                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                createdAt: FieldValue.serverTimestamp(),
             },
             { merge: true },
         );
@@ -45,7 +98,8 @@ async function updateStage(sessionId, newStage) {
     await sessionsRef.doc(sessionId).set(
         {
             currentStage: newStage,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+
         },
         { merge: true },
     );
@@ -147,6 +201,8 @@ exports.problem = onRequest(
                 isCleared,
             };
 
+            payload.arrivalRank = await getStageArrivalRank(stage);
+
             if (isCleared) {
                 payload.answer = problem.answer;
             }
@@ -160,7 +216,6 @@ exports.problem = onRequest(
         }
     },
 );
-
 /**
  * 정답 제출 API
  * POST /api/answer { sessionId, stage, answer }
@@ -231,6 +286,9 @@ exports.answer = onRequest(
             const newStage = Math.max(currentStage, nextStageNum);
             await updateStage(sessionId, newStage);
 
+            // ✅ 새 스테이지 도착 순번 계산
+            const arrivalRank = await recordStageArrival(newStage);
+
             const nextProblem = findProblem(newStage);
 
             // 더 이상 문제가 없으면 → 여기서 바로 클리어 응답
@@ -241,6 +299,8 @@ exports.answer = onRequest(
                     finished: true,
                     hasNext: false,
                     currentStage: newStage,
+                    nextStage: newStage,
+                    arrivalRank, // 몇 번째로 마지막 방까지 도착했는지
                     message: "모든 문제를 클리어했습니다!",
                     clearImageUrl: "/img/clear.png",
                 });
@@ -254,6 +314,7 @@ exports.answer = onRequest(
                 hasNext: true,
                 currentStage: newStage,
                 nextStage: newStage,
+                arrivalRank, // ✅ 다음 문제에 몇 번째로 도착했는지
                 nextProblem: {
                     stage: nextProblem.stage,
                     title: nextProblem.title,
@@ -269,6 +330,7 @@ exports.answer = onRequest(
         }
     },
 );
+
 
 /**
  * 진행도 초기화 API
@@ -295,7 +357,7 @@ exports.reset = onRequest(
             await sessionsRef.doc(sessionId).set(
                 {
                     currentStage: 1,
-                    resetAt: admin.firestore.FieldValue.serverTimestamp(),
+                    resetAt: FieldValue.serverTimestamp(),
                 },
                 { merge: true },
             );
