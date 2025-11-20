@@ -242,12 +242,12 @@ function renderRaceGlobal(stages) {
     if (n === 0) {
         raceTrackEl.classList.add("race-track-empty");
         raceTrackEl.innerHTML = `<p class="race-empty">도전중인 참가자가 없습니다.</p>`;
-        raceTitleEl.textContent = "전체 도전중 인원 경마 랭킹";
+        raceTitleEl.textContent = "전체 도전중 인원 랭킹";
         return;
     }
 
     raceTrackEl.classList.remove("race-track-empty");
-    raceTitleEl.textContent = `전체 도전중 인원 경마 랭킹 (상위 ${n}명)`;
+    raceTitleEl.textContent = `전체 도전중 인원 랭킹 (상위 ${n}명)`;
 
     const newPositions = {};
 
