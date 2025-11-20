@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>방탈출 관리자 페이지</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 🔥 분리한 스타일 -->
+    <link rel="stylesheet" href="/css/admin.css" />
+</head>
+
+<body>
+    <!-- 🔐 관리자 잠금 오버레이 -->
+    <div id="admin-lock" class="lock-overlay">
+        <div class="lock-card">
+            <h2>관리자 로그인</h2>
+            <p class="lock-desc">관리자 전용 페이지입니다. 비밀번호를 입력하세요.</p>
+
+            <input id="admin-password-input" type="password" placeholder="관리자 비밀번호" autocomplete="off" />
+
+            <button id="admin-login-btn" class="btn-primary lock-btn">
+                입장하기
+            </button>
+
+            <p id="admin-lock-msg" class="status-text"></p>
+        </div>
+    </div>
+
+    <!-- 🔥 실제 관리자 내용은 여기 안에 -->
+    <div id="admin-content" class="hidden">
+        <div class="admin-container"><!-- ✅ 추가 -->
+
+            <h1>멘사코리아 방탈출 · 관리자 페이지</h1>
+
+            <div class="top-row">
+                <button id="refresh-btn" class="btn-primary">통계 새로고침</button>
+                <button id="reset-btn" class="btn-danger">통계 / 랭킹 초기화</button>
+                <span id="status" class="status-text"></span>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>방</th>
+                        <th>클리어한 인원</th>
+                        <th>도전중인 인원</th>
+                    </tr>
+                </thead>
+                <tbody id="stats-body"></tbody>
+            </table>
+
+            <div class="clear-section">
+                <h2>스테이지별 클리어 현황</h2>
+                <p class="clear-desc">각 스테이지를 클리어한 참가자들이 도착 순서대로 표시됩니다.</p>
+                <div id="clear-list"></div>
+            </div>
+
+        </div><!-- admin-container 끝 -->
+    </div>
+
+    <script src="/js/admin.js" defer></script>
+</body>
+
+</html>

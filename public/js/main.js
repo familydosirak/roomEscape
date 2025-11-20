@@ -80,8 +80,8 @@ let maxUnlockedStage = 1;
 let isFinished = false;
 
 // 🔥 쿨타임 관련 전역 상태
-let baseCooldown = 10;      // 기본 쿨타임 (초)
-let nextCooldown = 10;      // 다음 오답 때 적용될 쿨타임
+let baseCooldown = 5;      // 기본 쿨타임 (초)
+let nextCooldown = 5;      // 다음 오답 때 적용될 쿨타임
 let cooldownUntil = null;   // 쿨타임 종료 시각 (timestamp ms)
 let cooldownStage = null;   // 쿨타임이 걸려있는 스테이지 번호
 let wrongCooldown = null;   // setInterval 핸들
@@ -140,6 +140,10 @@ try {
 const mainScreen = document.getElementById("main-screen");
 const gameScreen = document.getElementById("game-screen");
 const startBtn = document.getElementById("start-btn");
+const nicknameInput = document.getElementById("nickname-input");
+
+const nicknameChangeBtn = document.getElementById("nickname-change-btn");
+const nicknameMsg = document.getElementById("nickname-message");
 
 const stageInfoEl = document.getElementById("stage-info");
 const titleEl = document.getElementById("problem-title");
@@ -153,6 +157,11 @@ const prevBtn = document.getElementById("prev-btn");
 const nextBtn = document.getElementById("next-btn");
 const inputRow = document.querySelector(".input-row");
 const resetBtn = document.getElementById("reset-btn");
+
+let nickname = localStorage.getItem("escapeNickname") || "";
+if (nicknameInput && nickname) {
+    nicknameInput.value = nickname;
+}
 
 function updateNavButtons() {
     if (isFinished) {
@@ -502,7 +511,7 @@ async function submitAnswer() {
         if (!data.correct) {
             // 이번에 적용할 쿨타임 (기본 10초, 틀릴 때마다 +2초)
             const cooldownSeconds = nextCooldown;
-            nextCooldown += 2;
+            nextCooldown += 1;
 
             startCooldown(cooldownSeconds, currentStage);
             return;
@@ -580,12 +589,23 @@ async function submitAnswer() {
         alert("정답 제출 중 오류가 발생했습니다.");
     }
 }
-
 // 게임 시작: 상태만 먼저 조회해서 이어하기/클리어 분기
 async function startGame() {
     startBtn.disabled = true;
 
     try {
+        // ✅ 규칙 1: 아직 확정된 닉네임이 없으면 게임 시작 불가
+        if (!nickname || !nickname.trim()) {
+            alert("닉네임을 먼저 설정해주세요!");
+            if (nicknameInput) nicknameInput.focus();
+            startBtn.disabled = false;
+            return;
+        }
+
+        // ✅ 여기서는 입력창에 뭐가 적혀있든, "확정된 nickname 변수"만 사용
+        //    (닉네임 다시 바꾸고 싶으면 반드시 '닉네임 설정' 버튼을 눌러야 함)
+
+        // 이미 클리어 상태 저장돼 있으면 그대로 클리어 화면
         if (finishedState) {
             mainScreen.classList.add("hidden");
             gameScreen.classList.remove("hidden");
@@ -598,8 +618,12 @@ async function startGame() {
             return;
         }
 
+        // 🔥 닉네임은 changeNickname API에서 이미 서버에 반영된 상태라고 가정
+        // 굳이 여기서 다시 닉네임을 보낼 필요 없음
         const res = await fetch(
-            `/api/problem?stage=0&sessionId=${encodeURIComponent(sessionId)}`
+            `/api/problem?stage=0&sessionId=${encodeURIComponent(
+                sessionId,
+            )}`
         );
         const data = await res.json();
 
@@ -629,7 +653,107 @@ async function startGame() {
     }
 }
 
+const nicknameRegex = /^[가-힣a-zA-Z0-9_ ]+$/;
+
+// 🔥 닉네임을 서버에 설정/변경하는 공통 함수
+async function applyNickname(rawNick) {
+    // 1) 앞뒤 공백 제거 + 연속 공백 1개로 정규화
+    let nick = (rawNick || "").toString();
+    nick = nick.replace(/\s+/g, " ").trim(); // 여러 칸 공백 → 한 칸, 앞뒤 공백 제거
+
+    // 인풋 박스에도 정리된 값 다시 넣어주기 (사용자 눈에도 통일된 형태로 보이게)
+    if (nicknameInput) {
+        nicknameInput.value = nick;
+    }
+
+    if (!nick) {
+        if (nicknameMsg) {
+            nicknameMsg.style.color = "#f97373";
+            nicknameMsg.textContent = "닉네임을 입력해주세요.";
+        }
+        return false;
+    }
+
+    // 2) 길이 제한: 최소 2자, 최대 12자
+    if (nick.length < 2 || nick.length > 12) {
+        if (nicknameMsg) {
+            nicknameMsg.style.color = "#f97373";
+            nicknameMsg.textContent = "닉네임은 최소 2자, 최대 12자까지 가능합니다.";
+        }
+        return false;
+    }
+
+    // 3) 허용 문자 검사
+    if (!nicknameRegex.test(nick)) {
+        if (nicknameMsg) {
+            nicknameMsg.style.color = "#f97373";
+            nicknameMsg.textContent = "닉네임은 한글, 영어, 숫자, 언더바(_), 공백만 가능합니다.";
+        }
+        return false;
+    }
+
+    if (nicknameMsg) {
+        nicknameMsg.style.color = "#9ca3af";
+        nicknameMsg.textContent = "닉네임 확인 중...";
+    }
+
+    try {
+        const res = await fetch("/api/changeNickname", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, nickname: nick }), // 정리된 nick 사용
+        });
+
+        const data = await res.json();
+
+        if (!data.ok) {
+            if (nicknameMsg) {
+                nicknameMsg.style.color = "#f97373";
+                nicknameMsg.textContent =
+                    data.message || "닉네임 설정에 실패했습니다.";
+            }
+            return false;
+        }
+
+        // ✅ 여기서만 "확정 닉네임" 업데이트
+        nickname = nick;
+        localStorage.setItem("escapeNickname", nickname);
+
+        if (nicknameMsg) {
+            nicknameMsg.style.color = "#4ade80";
+            nicknameMsg.textContent = "닉네임이 설정/변경되었습니다.";
+        }
+
+        return true;
+    } catch (e) {
+        console.error(e);
+        if (nicknameMsg) {
+            nicknameMsg.style.color = "#f97373";
+            nicknameMsg.textContent = "닉네임 변경 중 오류가 발생했습니다.";
+        }
+        return false;
+    }
+}
+
+
+
 startBtn.addEventListener("click", startGame);
+
+if (nicknameChangeBtn) {
+    nicknameChangeBtn.addEventListener("click", async () => {
+        const nick = nicknameInput ? nicknameInput.value.trim() : "";
+        nicknameChangeBtn.disabled = true;
+        const ok = await applyNickname(nick);
+        nicknameChangeBtn.disabled = false;
+
+        // 닉네임 중복이면 게임 시작 전에 바로 알 수 있음
+        if (!ok && nicknameInput) {
+            nicknameInput.focus();
+        }
+    });
+}
+
+
 submitBtn.addEventListener("click", submitAnswer);
 
 answerInput.addEventListener("keydown", (e) => {
@@ -662,7 +786,7 @@ nextBtn.addEventListener("click", () => {
 });
 
 async function resetGame() {
-    if (!confirm("정말 처음부터 다시 시작할까요?")) {
+    if (!confirm("정말 처음부터 다시 시작할까요? 초기화 후 순위가 다시 매겨집니다.")) {
         return;
     }
 

@@ -216,3 +216,33 @@ button:disabled {
         font-size: 13px;
     }
 }
+
+.nickname-row {
+    margin-bottom: 16px;
+}
+
+.nickname-input-wrap {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.secondary-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #4b5563;
+    background: #111827;
+    color: #e5e7eb;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.nickname-message {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.hidden {
+    display: none !important;
+}

@@ -1,0 +1,297 @@
+/* =============== 기본 레이아웃 =============== */
+
+body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #111827;
+    color: #e5e7eb;
+    padding: 24px;
+}
+
+/* 가운데 폭 제한 */
+.admin-container {
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+h1 {
+    font-size: 24px;
+    margin-bottom: 16px;
+}
+
+.top-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.status-text {
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+/* =============== 테이블 =============== */
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    background: #020617;
+    border-radius: 8px;
+    /* 툴팁 잘리지 않게 */
+    overflow: visible;
+}
+
+th,
+td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #1f2937;
+    font-size: 14px;
+    text-align: center;
+}
+
+th {
+    background: #0f172a;
+}
+
+/* 마지막 줄 보더 제거 */
+tr:last-child td {
+    border-bottom: none;
+}
+
+/* hover 효과 */
+tbody tr:hover {
+    background: #020617cc;
+}
+
+/* 1열 - 방 번호 */
+th:nth-child(1),
+td:nth-child(1) {
+    width: 80px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 2열 - 클리어 인원 */
+th:nth-child(2),
+td:nth-child(2) {
+    width: 140px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 3열 - 도전 중 인원 */
+th:nth-child(3),
+td:nth-child(3) {
+    text-align: left;
+}
+
+/* =============== 닉네임 태그 =============== */
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-start;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #e5e7eb;
+    white-space: nowrap;
+}
+
+/* 많아졌을 때 세로 높이 제한만 (행 자체 높이 폭주 방지) */
+td:nth-child(3) .tag-list {
+    max-height: 72px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* 도전 인원 없을 때 */
+.empty-text {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+/* “그 외 N명” 태그 자체 */
+.tag-more {
+    background: #0f172a;
+    border-style: dashed;
+    cursor: pointer;
+}
+
+/* =============== 전역 툴팁 (JS로 body 밑에 생성) =============== */
+
+.tooltip-bubble {
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -100%);
+    background: #020617;
+    border-radius: 10px;
+    border: 1px solid #4b5563;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #e5e7eb;
+    min-width: 220px;
+    max-width: 520px;
+    white-space: normal;
+    text-align: left;
+    box-shadow: 0 16px 32px rgba(0, 0, 0, 0.85);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    z-index: 9999;
+}
+
+.tooltip-bubble.visible {
+    opacity: 1;
+    transform: translate(-50%, -110%);
+}
+
+/* =============== 스테이지별 클리어 리스트 =============== */
+
+.clear-section {
+    margin-top: 24px;
+    padding: 16px 18px;
+    background: #020617;
+    border-radius: 10px;
+    border: 1px solid #1f2937;
+}
+
+.clear-section h2 {
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.clear-desc {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-bottom: 12px;
+}
+
+.clear-stage-block {
+    margin-bottom: 10px;
+}
+
+.clear-stage-title {
+    font-size: 13px;
+    color: #e5e7eb;
+    margin-bottom: 4px;
+}
+
+.clear-tag-list {
+    gap: 4px;
+}
+
+/* 클리어 태그 강조 */
+.clear-tag {
+    background: #064e3b;
+    border-color: #10b981;
+    font-size: 11px;
+}
+
+/* 마지막 스테이지 구분 */
+.clear-stage-final {
+    border-top: 1px dashed #10b981;
+    padding-top: 8px;
+    margin-top: 12px;
+}
+
+.clear-stage-final .clear-stage-title {
+    color: #bbf7d0;
+    font-weight: 600;
+}
+
+/* =============== 관리자 잠금 오버레이 =============== */
+
+.lock-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+}
+
+.lock-overlay.hidden {
+    display: none;
+}
+
+.hidden {
+    display: none;
+}
+
+.lock-card {
+    background: #020617;
+    border-radius: 10px;
+    padding: 24px 28px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+    border: 1px solid #1f2937;
+}
+
+.lock-card h2 {
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+
+.lock-desc {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-bottom: 16px;
+}
+
+.lock-card input[type="password"] {
+    width: 94%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #374151;
+    background: #020617;
+    color: #e5e7eb;
+    font-size: 14px;
+    margin-bottom: 10px;
+    outline: none;
+}
+
+.lock-card input[type="password"]:focus {
+    border-color: #3b82f6;
+}
+
+.lock-btn {
+    width: 100%;
+    margin-top: 4px;
+}
+
+#admin-lock-msg {
+    margin-top: 8px;
+    min-height: 16px;
+}

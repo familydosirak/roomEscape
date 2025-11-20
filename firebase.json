@@ -38,6 +38,27 @@
         }
       },
       {
+        "source": "/api/admin/stats",
+        "function": {
+          "functionId": "adminStats",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/admin/resetStats",
+        "function": {
+          "functionId": "adminResetStats",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/changeNickname",
+        "function": {
+          "functionId": "changeNickname",
+          "region": "asia-northeast1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

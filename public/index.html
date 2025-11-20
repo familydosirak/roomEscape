@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8" />
   <title>2025 멘사코리아 연말파티 방탈출 게임</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
+
 <body>
   <!-- 메인 화면 -->
   <div id="main-screen" class="container">
@@ -13,8 +15,22 @@
     <p class="subtitle">
       방 안에 숨겨진 단서를 찾아 정답을 입력해 탈출해보세요!
     </p>
+
+    <div class="nickname-row">
+      <label for="nickname-input">닉네임</label>
+      <div class="nickname-input-wrap">
+        <input id="nickname-input" type="text" maxlength="20" />
+        <button id="nickname-change-btn" class="secondary-btn">
+          닉네임 설정
+        </button>
+      </div>
+      <!-- 🔥 닉네임 상태 메시지 -->
+      <div id="nickname-message" class="nickname-message"></div>
+    </div>
+
     <button id="start-btn" class="primary-btn">게임 시작</button>
   </div>
+
 
   <!-- 게임 화면 -->
   <div id="game-screen" class="container hidden">
@@ -31,12 +47,7 @@
     <div id="problem-desc"></div>
 
     <div class="input-row">
-      <input
-        id="answer-input"
-        type="text"
-        placeholder="정답을 입력하세요"
-        autocomplete="off"
-      />
+      <input id="answer-input" type="text" placeholder="정답을 입력하세요" autocomplete="off" />
       <button id="submit-btn">제출</button>
     </div>
 
@@ -50,4 +61,5 @@
 
   <script src="/js/main.js" defer></script>
 </body>
+
 </html>
