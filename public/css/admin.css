@@ -295,3 +295,135 @@ td:nth-child(3) .tag-list {
     margin-top: 8px;
     min-height: 16px;
 }
+
+/* =============== 경마 섹션 =============== */
+
+.race-section {
+    margin-top: 24px;
+    padding: 16px 18px;
+    background: #020617;
+    border-radius: 10px;
+    border: 1px solid #1f2937;
+}
+
+.race-section h2 {
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.race-desc {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-bottom: 10px;
+}
+
+/* 전체 트랙 (한 번만) */
+.race-track {
+    margin-top: 6px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+
+    display: flex;
+    flex-direction: column;
+
+    /* 경마장 느낌 배경 */
+    background:
+        linear-gradient(#92400e 0 0) top/100% 8px no-repeat,
+        /* 위 라인 */
+        linear-gradient(#92400e 0 0) bottom/100% 8px no-repeat,
+        /* 아래 라인 */
+        repeating-linear-gradient(to bottom,
+            #166534 0,
+            #166534 22px,
+            #15803d 22px,
+            #15803d 44px);
+    border: 1px solid #4b5563;
+}
+
+.race-track-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+}
+
+.race-empty {
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+/* 한 명당 한 줄 레인 */
+.race-lane {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+}
+
+/* 글로벌 순위 라벨 */
+.race-rank {
+    font-size: 12px;
+    color: #fbbf24;
+    min-width: 52px;
+}
+
+/* 레인 안쪽 트랙 */
+.race-lane-track {
+    position: relative;
+    flex: 1;
+    height: 30px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.7);
+    overflow: hidden;
+}
+
+/* 말 + 닉네임 (실제 움직이는 부분) */
+.race-horse {
+    position: absolute;
+    top: 50%;
+    left: 0%;
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.7);
+    font-size: 11px;
+    white-space: nowrap;
+
+    /* 순위 바뀔 때 부드럽게 이동 */
+    transition: left 0.8s ease-out;
+    /* 말 통통 뛰는 애니메이션 (top만 살짝 변경) */
+    animation: horse-gallop 0.5s ease-in-out infinite alternate;
+}
+
+.race-icon {
+    font-size: 14px;
+}
+
+.race-name {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 말 밑에 단계(몇 번 방인지) 살짝 표시 */
+.race-stage-label {
+    font-size: 10px;
+    color: #9ca3af;
+}
+
+@keyframes horse-gallop {
+    0% {
+        transform: translate(-50%, -50%) translateY(-2px);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) translateY(2px);
+    }
+}

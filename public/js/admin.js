@@ -1,4 +1,6 @@
-// public/js/admin.js
+/* =========================================================
+admin.js — 방탈출 관리자 페이지 (경마 애니메이션 완성본)
+========================================================= */
 
 const refreshBtn = document.getElementById("refresh-btn");
 const resetBtn = document.getElementById("reset-btn");
@@ -12,17 +14,67 @@ const adminPwdInput = document.getElementById("admin-password-input");
 const adminLoginBtn = document.getElementById("admin-login-btn");
 const adminLockMsg = document.getElementById("admin-lock-msg");
 
-// 🔐 현재 로그인된 관리자 비밀번호(성공 후에만 세팅)
-let adminPassword = "";
+const raceTrackEl = document.getElementById("race-track");
+const raceTitleEl = document.getElementById("race-title");
 
-// 🔥 자동 새로고침 관련 전역 상태
+/* =========================================================
+🐎 전역 저장소 — “이전 위치” 기억 → 추월 애니메이션에 사용
+예: prevRacePositions["홍길동"] = 0.85
+   ========================================================= */
+let prevRacePositions = {};
+
+let raceHorseMap = {}; // 기존 말 DOM 재사용
+
+let adminPassword = "";
 const AUTO_REFRESH_MS = 15000;
 let autoTimer = null;
 let isLoading = false;
 
-/**
- * 통계 데이터를 화면에 렌더링
- */
+/* =========================================================
+0. 공용 툴팁
+========================================================= */
+
+let tooltipEl = null;
+
+function ensureTooltipEl() {
+    if (tooltipEl) return tooltipEl;
+    tooltipEl = document.createElement("div");
+    tooltipEl.className = "tooltip-bubble";
+    document.body.appendChild(tooltipEl);
+    return tooltipEl;
+}
+
+function showTooltipFor(target) {
+    const text = target.getAttribute("data-tooltip");
+    if (!text) return;
+    const el = ensureTooltipEl();
+    el.textContent = text;
+
+    const rect = target.getBoundingClientRect();
+    el.style.left = rect.left + rect.width / 2 + "px";
+    el.style.top = rect.top + "px";
+
+    el.classList.add("visible");
+}
+
+function hideTooltip() {
+    if (!tooltipEl) return;
+    tooltipEl.classList.remove("visible");
+}
+
+document.addEventListener("mousemove", (e) => {
+    const target = e.target.closest(".tag-more");
+    if (target) showTooltipFor(target);
+    else hideTooltip();
+});
+
+window.addEventListener("scroll", hideTooltip);
+window.addEventListener("resize", hideTooltip);
+
+/* =========================================================
+   1. 테이블 렌더링
+   ========================================================= */
+
 function renderStats(stages) {
     tbody.innerHTML = "";
 
@@ -33,10 +85,6 @@ function renderStats(stages) {
         tdStage.textContent = `${s.stage}번`;
         tr.appendChild(tdStage);
 
-        /* const tdTitle = document.createElement("td");
-        tdTitle.textContent = s.title || "";
-        tr.appendChild(tdTitle); */
-
         const tdCleared = document.createElement("td");
         tdCleared.textContent = `${s.clearedCount || 0}명`;
         tr.appendChild(tdCleared);
@@ -44,120 +92,104 @@ function renderStats(stages) {
         const tdNames = document.createElement("td");
         const names = s.challengers || [];
 
-        if (names.length) {
-            const tagWrap = document.createElement("div");
-            tagWrap.className = "tag-list";
+        if (names.length > 0) {
+            const wrap = document.createElement("div");
+            wrap.className = "tag-list";
 
-            const MAX_SHOW = 10;
-            const visible = names.slice(0, MAX_SHOW);
-            const rest = names.slice(MAX_SHOW);
+            const MAX = 10;
+            const shown = names.slice(0, MAX);
+            const rest = names.slice(MAX);
 
-            visible.forEach((name) => {
+            shown.forEach((n) => {
                 const tag = document.createElement("span");
                 tag.className = "tag";
-                tag.textContent = name;
-                tagWrap.appendChild(tag);
+                tag.textContent = n;
+                wrap.appendChild(tag);
             });
 
             if (rest.length > 0) {
-                const moreTag = document.createElement("span");
-                moreTag.className = "tag tag-more";
-                moreTag.textContent = `그 외 ${rest.length}명`;
-                moreTag.setAttribute("data-tooltip", rest.join(", "));
-                tagWrap.appendChild(moreTag);
+                const tag = document.createElement("span");
+                tag.className = "tag tag-more";
+                tag.textContent = `그 외 ${rest.length}명`;
+                tag.setAttribute("data-tooltip", rest.join(", "));
+                wrap.appendChild(tag);
             }
-
-            tdNames.appendChild(tagWrap);
+            tdNames.appendChild(wrap);
         } else {
-            // ✅ 도전 인원 없을 때 깔끔한 문구 + 왼쪽 정렬
-            const empty = document.createElement("span");
-            empty.className = "empty-text";
-            empty.textContent = "- 도전중인 인원 없음";
-            tdNames.appendChild(empty);
+            const no = document.createElement("span");
+            no.className = "empty-text";
+            no.textContent = "- 도전중인 인원 없음";
+            tdNames.appendChild(no);
         }
 
         tr.appendChild(tdNames);
-
         tbody.appendChild(tr);
     });
 
-    // 테이블 렌더 후, 클리어 섹션도 같이 업데이트
-    renderClearList(stages || []);
+    renderClearList(stages);
+    renderRaceGlobal(stages);
 }
 
+/* =========================================================
+   2. 클리어 리스트
+   ========================================================= */
+
 function renderClearList(stages) {
-    if (!clearListEl) return;
-
     clearListEl.innerHTML = "";
-
-    if (!stages || !stages.length) {
-        const empty = document.createElement("div");
-        empty.className = "clear-stage-title";
-        empty.textContent = "아직 클리어한 사람이 없습니다.";
-        clearListEl.appendChild(empty);
-        return;
-    }
 
     let hasAny = false;
 
-    // 🔥 가장 마지막 스테이지 번호 찾기 (최종 클리어 기준)
-    const maxStage = stages.reduce((max, s) => {
-        const n = Number(s.stage || 0);
-        return n > max ? n : max;
-    }, 0);
+    const maxStage = Math.max(
+        ...stages.map((s) => Number(s.stage || 0)),
+        0,
+    );
 
     stages.forEach((s) => {
-        const clearers = s.clearers || [];
-        if (!clearers.length) return;
+        const list = s.clearers || [];
+        if (!list.length) return;
 
         hasAny = true;
 
-        const isFinalStage = Number(s.stage) === maxStage;
+        const isFinal = Number(s.stage) === maxStage;
 
         const block = document.createElement("div");
-        block.className = "clear-stage-block" + (isFinalStage ? " clear-stage-final" : "");
+        block.className = "clear-stage-block" + (isFinal ? " clear-stage-final" : "");
 
-        const titleEl = document.createElement("div");
-        titleEl.className = "clear-stage-title";
-        titleEl.textContent = `${s.stage}번 방` +
-            (isFinalStage ? " (최종 클리어)" : "");
+        const title = document.createElement("div");
+        title.className = "clear-stage-title";
+        title.textContent = `${s.stage}번 방${isFinal ? " (최종 클리어)" : ""}`;
 
-        const listWrap = document.createElement("div");
-        listWrap.className = "tag-list clear-tag-list";
+        const wrap = document.createElement("div");
+        wrap.className = "tag-list clear-tag-list";
 
-        const MAX_SHOW = 10;
+        const MAX = 10;
+        const shown = isFinal ? list : list.slice(0, MAX);
+        const rest = isFinal ? [] : list.slice(MAX);
 
-        // ✅ 최종 스테이지는 전체 표시, 나머지는 10명까지만 표시
-        const visible = isFinalStage ? clearers : clearers.slice(0, MAX_SHOW);
-        const rest = isFinalStage ? [] : clearers.slice(MAX_SHOW);
-
-        // 보이는 애들 태그 생성
-        visible.forEach((name, idx) => {
+        shown.forEach((name, idx) => {
             const tag = document.createElement("span");
             tag.className = "tag clear-tag";
             tag.textContent = `${idx + 1}위 ${name}`;
-            listWrap.appendChild(tag);
+            wrap.appendChild(tag);
         });
 
-        // 나머지는 "그 외 N명" + 툴팁으로 전체 이름 보여주기
         if (rest.length > 0) {
-            const moreTag = document.createElement("span");
-            moreTag.className = "tag clear-tag tag-more";
+            const more = document.createElement("span");
+            more.className = "tag clear-tag tag-more";
+            more.textContent = `그 외 ${rest.length}명`;
 
-            moreTag.textContent = `그 외 ${rest.length}명`;
+            const start = shown.length + 1;
+            more.setAttribute(
+                "data-tooltip",
+                rest.map((n, i) => `${start + i}위 ${n}`).join(", "),
+            );
 
-            // 나머지 사람들도 몇 위인지 포함해서 툴팁으로
-            const startRank = visible.length + 1;
-            const tooltipText = rest
-                .map((name, i) => `${startRank + i}위 ${name}`)
-                .join(", ");
-
-            moreTag.setAttribute("data-tooltip", tooltipText);
-            listWrap.appendChild(moreTag);
+            wrap.appendChild(more);
         }
 
-        block.appendChild(titleEl);
-        block.appendChild(listWrap);
+        block.appendChild(title);
+        block.appendChild(wrap);
+
         clearListEl.appendChild(block);
     });
 
@@ -169,54 +201,144 @@ function renderClearList(stages) {
     }
 }
 
+/* =========================================================
+   3. 전체 도전중 인원 → 글로벌 순위 생성
+   ========================================================= */
 
-/**
- * 자동 새로고침 시작
- */
-function startAutoRefresh() {
-    if (autoTimer) {
-        clearInterval(autoTimer);
+function buildGlobalRunners(stages) {
+    if (!stages) return [];
+
+    const sorted = [...stages].sort((a, b) => Number(b.stage) - Number(a.stage));
+
+    const result = [];
+
+    sorted.forEach((s) => {
+        const names = s.challengers || [];
+        names.forEach((name, idx) => {
+            result.push({
+                name,
+                stage: Number(s.stage),
+                stageRank: idx + 1,
+            });
+        });
+    });
+
+    return result;
+}
+
+/* =========================================================
+   4. 🐎 경마 렌더링 (추월 애니메이션 완성본)
+   ========================================================= */
+
+function renderRaceGlobal(stages) {
+    if (!raceTrackEl) return;
+
+    const all = buildGlobalRunners(stages);
+    const top = all.slice(0, 20);
+    const n = top.length;
+
+    raceTrackEl.innerHTML = "";
+
+    if (n === 0) {
+        raceTrackEl.classList.add("race-track-empty");
+        raceTrackEl.innerHTML = `<p class="race-empty">도전중인 참가자가 없습니다.</p>`;
+        raceTitleEl.textContent = "전체 도전중 인원 경마 랭킹";
+        return;
     }
-    autoTimer = setInterval(loadStats, AUTO_REFRESH_MS);
+
+    raceTrackEl.classList.remove("race-track-empty");
+    raceTitleEl.textContent = `전체 도전중 인원 경마 랭킹 (상위 ${n}명)`;
+
+    const newPositions = {};
+
+    top.forEach((runner, index) => {
+        const globalRank = index + 1;
+
+        let progress;
+        if (n === 1) progress = 0.9;
+        else {
+            const t = (n - globalRank) / (n - 1);
+            progress = 0.25 + t * (0.9 - 0.25);
+        }
+
+        newPositions[runner.name] = progress;
+
+        let horseInfo = raceHorseMap[runner.name];
+
+        if (!horseInfo) {
+            const lane = document.createElement("div");
+            lane.className = "race-lane";
+
+            const rankEl = document.createElement("span");
+            rankEl.className = "race-rank";
+
+            const track = document.createElement("div");
+            track.className = "race-lane-track";
+
+            const horseEl = document.createElement("div");
+            horseEl.className = "race-horse";
+
+            horseEl.innerHTML = `
+                <span class="race-icon">🏇</span>
+                <span class="race-name"></span>
+                <span class="race-stage-label"></span>
+            `;
+
+            track.appendChild(horseEl);
+            lane.appendChild(rankEl);
+            lane.appendChild(track);
+
+            raceHorseMap[runner.name] = {
+                laneEl: lane,
+                horseEl,
+                rankEl,
+            };
+
+            horseInfo = raceHorseMap[runner.name];
+        }
+
+        const { laneEl, horseEl, rankEl } = horseInfo;
+
+        rankEl.textContent = `${globalRank}위`;
+
+        horseEl.querySelector(".race-name").textContent = runner.name;
+        horseEl.querySelector(".race-stage-label").textContent =
+            `(${runner.stage}번 방 ${runner.stageRank}위)`;
+
+        const oldPos = prevRacePositions[runner.name];
+
+        if (oldPos === undefined) {
+            horseEl.style.transition = "none";
+            horseEl.style.left = `${progress * 100}%`;
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    horseEl.style.transition = "left 0.8s ease-out";
+                    horseEl.style.left = `${progress * 100}%`;
+                });
+            });
+        } else {
+            horseEl.style.transition = "none";
+            horseEl.style.left = `${oldPos * 100}%`;
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    horseEl.style.transition = "left 0.8s ease-out";
+                    horseEl.style.left = `${progress * 100}%`;
+                });
+            });
+        }
+
+        raceTrackEl.appendChild(laneEl);
+    });
+
+    prevRacePositions = newPositions;
 }
 
-/**
- * 자동 새로고침 종료
- */
-function stopAutoRefresh() {
-    if (autoTimer) {
-        clearInterval(autoTimer);
-        autoTimer = null;
-    }
-}
+/* =========================================================
+   5. 통계 로딩 / 로그인 / 초기화
+   ========================================================= */
 
-/**
- * 관리자 잠금 해제 (UI만)
- */
-function showAdminContent() {
-    if (lockOverlay) lockOverlay.classList.add("hidden");
-    if (adminContent) adminContent.classList.remove("hidden");
-}
-
-/**
- * 다시 잠그기 (401 등)
- */
-function showLockScreen() {
-    stopAutoRefresh();
-    adminPassword = "";
-
-    if (adminContent) adminContent.classList.add("hidden");
-    if (lockOverlay) lockOverlay.classList.remove("hidden");
-
-    if (adminPwdInput) {
-        adminPwdInput.value = "";
-        adminPwdInput.focus();
-    }
-}
-
-/**
- * 통계 로딩 (이미 로그인된 상태에서만 사용)
- */
 async function loadStats() {
     if (isLoading) return;
     isLoading = true;
@@ -225,8 +347,6 @@ async function loadStats() {
 
     try {
         if (!adminPassword) {
-            statusEl.textContent = "관리자 비밀번호가 설정되지 않았습니다.";
-            isLoading = false;
             showLockScreen();
             return;
         }
@@ -238,9 +358,6 @@ async function loadStats() {
         });
 
         if (res.status === 401) {
-            statusEl.textContent =
-                "관리자 비밀번호가 올바르지 않습니다. 다시 로그인해주세요.";
-            isLoading = false;
             showLockScreen();
             return;
         }
@@ -249,233 +366,127 @@ async function loadStats() {
 
         if (!data.ok) {
             statusEl.textContent = data.message || "통계 조회 실패";
-            isLoading = false;
             return;
         }
 
         renderStats(data.stages || []);
 
-        const now = new Date();
-        statusEl.textContent = `마지막 갱신: ${now.toLocaleTimeString()} (자동 새로고침 ${AUTO_REFRESH_MS / 1000}초 간격)`;
+        statusEl.textContent =
+            `마지막 갱신: ${new Date().toLocaleTimeString()} (자동 새로고침 ${AUTO_REFRESH_MS / 1000}s)`;
     } catch (e) {
         console.error(e);
-        statusEl.textContent = "통계 조회 중 오류가 발생했습니다.";
+        statusEl.textContent = "통계 조회 중 오류 발생";
     } finally {
         isLoading = false;
     }
 }
 
-/**
- * 관리자 통계 / 랭킹 초기화
- */
 async function resetStats() {
-    if (
-        !confirm(
-            "정말 통계 / 도착 순위 / 진행도를 모두 초기화할까요?\n(모든 참가자가 1번부터 다시 시작하게 됩니다.)",
-        )
-    ) {
-        return;
-    }
+    if (!confirm("정말 초기화할까요? 모든 사람이 1번부터 다시 시작합니다.")) return;
 
-    if (!adminPassword) {
-        alert("관리자 비밀번호가 설정되지 않았습니다. 다시 로그인해주세요.");
+    const res = await fetch("/api/admin/resetStats", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Password": adminPassword,
+        },
+    });
+
+    if (res.status === 401) {
         showLockScreen();
         return;
     }
 
-    statusEl.textContent = "초기화 중...";
+    const data = await res.json();
 
-    try {
-        const res = await fetch("/api/admin/resetStats", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Admin-Password": adminPassword,
-            },
-        });
-
-        if (res.status === 401) {
-            statusEl.textContent =
-                "관리자 비밀번호가 올바르지 않습니다. 다시 로그인해주세요.";
-            showLockScreen();
-            return;
-        }
-
-        const data = await res.json();
-
-        if (!data.ok) {
-            statusEl.textContent = data.message || "초기화 실패";
-            return;
-        }
-
-        alert(data.message || "초기화되었습니다.");
-        await loadStats(); // 초기화 직후 한 번 강제 갱신
-    } catch (e) {
-        console.error(e);
-        statusEl.textContent = "초기화 중 오류가 발생했습니다.";
-    }
+    alert(data.message || "초기화되었습니다.");
+    loadStats();
 }
 
-/**
- * 로그인 버튼 클릭 시: 비번 검증 + 성공하면 관리자 화면 열기
- */
-async function handleAdminLogin() {
-    const input = adminPwdInput ? adminPwdInput.value.trim() : "";
-
-    if (!input) {
-        if (adminLockMsg) {
-            adminLockMsg.style.color = "#f97373";
-            adminLockMsg.textContent = "비밀번호를 입력해주세요.";
-        }
-        return;
-    }
-
-    // 일단 입력값으로 테스트 호출
-    if (adminLockMsg) {
-        adminLockMsg.style.color = "#9ca3af";
-        adminLockMsg.textContent = "비밀번호 확인 중...";
-    }
-
-    try {
-        const res = await fetch("/api/admin/stats", {
-            headers: {
-                "X-Admin-Password": input,
-            },
-        });
-
-        if (res.status === 401) {
-            if (adminLockMsg) {
-                adminLockMsg.style.color = "#f97373";
-                adminLockMsg.textContent = "비밀번호가 올바르지 않습니다.";
-            }
-            if (adminPwdInput) {
-                adminPwdInput.select();
-            }
-            return;
-        }
-
-        const data = await res.json();
-
-        if (!data.ok) {
-            if (adminLockMsg) {
-                adminLockMsg.style.color = "#f97373";
-                adminLockMsg.textContent =
-                    data.message || "통계를 불러오는 중 오류가 발생했습니다.";
-            }
-            return;
-        }
-
-        // ✅ 여기까지 왔으면 비밀번호 정상
-        adminPassword = input;
-
-        if (adminLockMsg) {
-            adminLockMsg.style.color = "#4ade80";
-            adminLockMsg.textContent = "로그인 성공! 관리자 페이지로 이동합니다.";
-        }
-
-        // UI 열기
-        showAdminContent();
-        renderStats(data.stages || []);
-
-        const now = new Date();
-        statusEl.textContent = `마지막 갱신: ${now.toLocaleTimeString()} (자동 새로고침 ${AUTO_REFRESH_MS / 1000}초 간격)`;
-
-        // 자동 새로고침 시작
-        startAutoRefresh();
-    } catch (e) {
-        console.error(e);
-        if (adminLockMsg) {
-            adminLockMsg.style.color = "#f97373";
-            adminLockMsg.textContent =
-                "비밀번호 확인 중 오류가 발생했습니다.";
-        }
-    }
+function showAdminContent() {
+    lockOverlay.classList.add("hidden");
+    adminContent.classList.remove("hidden");
 }
 
-// 이벤트 바인딩
-refreshBtn.addEventListener("click", loadStats);
-resetBtn.addEventListener("click", resetStats);
+function showLockScreen() {
+    stopAutoRefresh();
+    adminPassword = "";
 
-if (adminLoginBtn) {
-    adminLoginBtn.addEventListener("click", (e) => {
-        e.preventDefault();
-        handleAdminLogin();
-    });
-}
+    adminContent.classList.add("hidden");
+    lockOverlay.classList.remove("hidden");
 
-if (adminPwdInput) {
-    adminPwdInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            handleAdminLogin();
-        }
-    });
-
+    adminPwdInput.value = "";
     adminPwdInput.focus();
 }
 
-// ================= 전역 툴팁(.tag-more용) =================
+async function handleAdminLogin() {
+    const input = adminPwdInput.value.trim();
+    if (!input) return;
 
-let tooltipEl = null;
+    adminLockMsg.textContent = "비밀번호 확인 중...";
+    adminLockMsg.style.color = "#9ca3af";
 
-/**
- * 툴팁 DOM을 한번만 생성
- */
-function ensureTooltipEl() {
-    if (tooltipEl) return tooltipEl;
+    try {
+        const res = await fetch("/api/admin/stats", {
+            headers: { "X-Admin-Password": input },
+        });
 
-    tooltipEl = document.createElement("div");
-    tooltipEl.className = "tooltip-bubble";
-    document.body.appendChild(tooltipEl);
-    return tooltipEl;
-}
+        if (res.status === 401) {
+            adminLockMsg.textContent = "비밀번호가 올바르지 않습니다.";
+            adminLockMsg.style.color = "#f97373";
+            return;
+        }
 
-/**
- * target(.tag-more)을 기준으로 툴팁 표시
- */
-function showTooltipFor(target) {
-    const text = target.getAttribute("data-tooltip");
-    if (!text) return;
+        const data = await res.json();
+        if (!data.ok) {
+            adminLockMsg.textContent = "통계를 불러오는 중 오류 발생";
+            adminLockMsg.style.color = "#f97373";
+            return;
+        }
 
-    const el = ensureTooltipEl();
-    el.textContent = text;
+        adminPassword = input;
 
-    const rect = target.getBoundingClientRect();
-    const x = rect.left + rect.width / 2;
-    const y = rect.top; // 태그 위쪽 기준
+        adminLockMsg.textContent = "로그인 성공!";
+        adminLockMsg.style.color = "#4ade80";
 
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
-
-    el.classList.add("visible");
-}
-
-/**
- * 툴팁 숨기기
- */
-function hideTooltip() {
-    if (!tooltipEl) return;
-    tooltipEl.classList.remove("visible");
-}
-
-/**
- * 마우스 이동 시 .tag-more 위면 툴팁 보여주고,
- * 아니면 숨기기 (이벤트 위임)
- */
-document.addEventListener("mousemove", (e) => {
-    const target = e.target.closest(".tag-more");
-
-    if (target) {
-        showTooltipFor(target);
-    } else {
-        hideTooltip();
+        showAdminContent();
+        renderStats(data.stages || []);
+        startAutoRefresh();
+    } catch (e) {
+        adminLockMsg.textContent = "로그인 오류";
+        adminLockMsg.style.color = "#f97373";
     }
+}
+
+/* =========================================================
+   6. 자동 새로고침
+   ========================================================= */
+
+function startAutoRefresh() {
+    if (autoTimer) clearInterval(autoTimer);
+    autoTimer = setInterval(loadStats, AUTO_REFRESH_MS);
+}
+
+function stopAutoRefresh() {
+    if (autoTimer) clearInterval(autoTimer);
+    autoTimer = null;
+}
+
+/* =========================================================
+   7. 이벤트
+   ========================================================= */
+
+refreshBtn.addEventListener("click", loadStats);
+resetBtn.addEventListener("click", resetStats);
+
+adminLoginBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    handleAdminLogin();
 });
 
-// 스크롤/리사이즈 시에도 잠깐 숨기기
-window.addEventListener("scroll", hideTooltip);
-window.addEventListener("resize", hideTooltip);
-
-
-// ❌ 페이지 진입 시 자동 조회 / 자동 새로고침 금지
-//    반드시 비밀번호가 맞아야만 loadStats/startAutoRefresh가 실행됨
+adminPwdInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        handleAdminLogin();
+    }
+});
