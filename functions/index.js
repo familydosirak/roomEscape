@@ -12,6 +12,7 @@ const db = getFirestore();
 const sessionsRef = db.collection("sessions");
 const stageStatsRef = db.collection("stageStats");
 const stageClearsRef = db.collection("stageClears");
+const choiceRoundsRef = db.collection("choiceRounds");
 
 const nicknameRegex = /^[가-힣a-zA-Z0-9_ ]+$/; // 닉네임 정규식: 한글, 영어, 숫자, 언더바, 공백 허용
 
@@ -185,6 +186,7 @@ exports.problem = onRequest(
             const payload = {
                 ok: true,
                 stage: problem.stage,
+                type: problem.type || "INPUT",
                 title: problem.title,
                 imageUrl: problem.imageUrl,
                 description: problem.description,
@@ -192,6 +194,17 @@ exports.problem = onRequest(
                 currentStage,
                 isCleared,
             };
+
+            // 선택/탭/분기 설정도 그대로 내려주기
+            if (problem.options) {
+                payload.options = problem.options;
+            }
+            if (problem.tapConfig) {
+                payload.tapConfig = problem.tapConfig;
+            }
+            if (problem.choiceConfig) {
+                payload.choiceConfig = problem.choiceConfig;
+            }
 
             payload.arrivalRank = await getStageClearCount(stage);
 
@@ -347,6 +360,24 @@ exports.answer = onRequest(
             }
 
             // 다음 문제까지 같이 내려줌
+            const nextProblemPayload = {
+                stage: nextProblem.stage,
+                type: nextProblem.type || "INPUT",
+                title: nextProblem.title,
+                imageUrl: nextProblem.imageUrl,
+                description: nextProblem.description,
+            };
+
+            if (nextProblem.options) {
+                nextProblemPayload.options = nextProblem.options;
+            }
+            if (nextProblem.tapConfig) {
+                nextProblemPayload.tapConfig = nextProblem.tapConfig;
+            }
+            if (nextProblem.choiceConfig) {
+                nextProblemPayload.choiceConfig = nextProblem.choiceConfig;
+            }
+
             return res.json({
                 ok: true,
                 correct: true,
@@ -354,13 +385,8 @@ exports.answer = onRequest(
                 hasNext: true,
                 currentStage: newStage,
                 nextStage: newStage,
-                nextProblem: {
-                    stage: nextProblem.stage,
-                    title: nextProblem.title,
-                    imageUrl: nextProblem.imageUrl,
-                    description: nextProblem.description,
-                },
-                arrivalRank, // 프론트에서 "몇 번째로 도착했어요!" 표시용
+                nextProblem: nextProblemPayload,
+                arrivalRank,
             });
 
         } catch (e) {
@@ -797,3 +823,431 @@ exports.changeNickname = onRequest(
     },
 );
 
+/**
+ * CHOICE 문제에서 A/B 선택 기록
+ * POST /api/choiceVote { sessionId, stage, option }
+ */
+exports.choiceVote = onRequest(
+    { region: "asia-northeast1" },
+    async (req, res) => {
+        if (req.method !== "POST") {
+            return res
+                .status(405)
+                .json({ ok: false, message: "POST만 가능합니다." });
+        }
+
+        try {
+            const body = req.body || {};
+            const sessionId = (body.sessionId || "").toString().trim();
+            const stageNum = Number(body.stage);
+            const option = (body.option || "").toString().trim();
+
+            if (!sessionId || !stageNum || !option) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "sessionId, stage, option이 필요합니다.",
+                });
+            }
+
+            // 세션 현재 진행도 확인
+            const currentStage = await getCurrentStage(sessionId);
+
+            if (stageNum !== currentStage) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "현재 진행 중인 스테이지에서만 선택할 수 있습니다.",
+                    currentStage,
+                });
+            }
+
+            const problem = findProblem(stageNum);
+            if (!problem) {
+                return res
+                    .status(404)
+                    .json({ ok: false, message: "존재하지 않는 문제입니다." });
+            }
+
+            if ((problem.type || "INPUT").toUpperCase() !== "CHOICE") {
+                return res.status(400).json({
+                    ok: false,
+                    message: "이 문제는 CHOICE 타입이 아닙니다.",
+                });
+            }
+
+            const optionIds = (problem.options || []).map((o) => o.id);
+            if (!optionIds.includes(option)) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "선택할 수 없는 옵션입니다.",
+                });
+            }
+
+            const cfg = problem.choiceConfig || {};
+            const groupId = cfg.groupId || `stage_${stageNum}`;
+            const windowMs = Number(cfg.windowMs || 60000);
+
+            const nowMs = Date.now();
+            const roundStartMs = Math.floor(nowMs / windowMs) * windowMs; // 1분 단위로 고정
+            const roundId = String(roundStartMs);
+            const roundDocId = `${groupId}_${stageNum}_${roundId}`;
+
+            const sessionDocRef = sessionsRef.doc(sessionId);
+            const roundDocRef = choiceRoundsRef.doc(roundDocId);
+
+            await db.runTransaction(async (t) => {
+                const [sessSnap, roundSnap] = await Promise.all([
+                    t.get(sessionDocRef),
+                    t.get(roundDocRef),
+                ]);
+
+                const sessData = sessSnap.exists ? sessSnap.data() || {} : {};
+
+                // 🔄 멱등성 체크 (같은 라운드, 같은 옵션이면 다시 카운트 안 올림)
+                if (
+                    sessData.choiceStage === stageNum &&
+                    sessData.choiceRoundId === roundId &&
+                    sessData.choiceOption === option
+                ) {
+                    return;
+                }
+
+                // 🧾 세션에 선택 정보 기록
+                t.set(
+                    sessionDocRef,
+                    {
+                        choiceStage: stageNum,
+                        choiceGroupId: groupId,
+                        choiceRoundId: roundId,
+                        choiceOption: option,
+                        choiceVotedAt: FieldValue.serverTimestamp(),
+                    },
+                    { merge: true },
+                );
+
+                // 🧱 라운드 문서가 아직 없으면 → counts 객체 새로 만들기
+                if (!roundSnap.exists) {
+                    t.set(roundDocRef, {
+                        groupId,
+                        stage: stageNum,
+                        roundId,
+                        windowMs,
+                        counts: { [option]: 1 },
+                        resolved: false,
+                        createdAt: FieldValue.serverTimestamp(),
+                    });
+                    return;
+                }
+
+                // 🧱 이미 라운드 문서가 있으면 → counts 객체를 직접 읽어서 +1
+                const roundData = roundSnap.data() || {};
+                const oldCounts =
+                    roundData.counts && typeof roundData.counts === "object"
+                        ? roundData.counts
+                        : {};
+
+                const newCounts = { ...oldCounts };
+                const prev = Number(newCounts[option] || 0);
+                newCounts[option] = prev + 1;
+
+                t.set(
+                    roundDocRef,
+                    {
+                        groupId,
+                        stage: stageNum,
+                        roundId,
+                        windowMs,
+                        counts: newCounts,
+                        // resolved 그대로 유지 (필요하면 roundData.resolved 체크해서 넣어도 됨)
+                    },
+                    { merge: true },
+                );
+            });
+
+
+            const windowEndMs = roundStartMs + windowMs;
+
+            return res.json({
+                ok: true,
+                mode: "MINORITY_GO_NEXT",
+                windowMs,
+                roundId,
+                windowEndMs,
+            });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({
+                ok: false,
+                message: "선택을 기록하는 중 서버 오류가 발생했습니다.",
+            });
+        }
+    },
+);
+
+/**
+ * CHOICE 문제 결과 확인
+ * POST /api/choiceResult { sessionId }
+ *
+ * 응답:
+ *  - { ok:true, status:"PENDING", waitMs }
+ *  - { ok:true, status:"WIN", currentStage, nextStage, finished }
+ *  - { ok:true, status:"LOSE", currentStage, winningOption }
+ *  - { ok:true, status:"DRAW", currentStage, winningOption:null }
+ */
+exports.choiceResult = onRequest(
+    { region: "asia-northeast1" },
+    async (req, res) => {
+        if (req.method !== "POST") {
+            return res
+                .status(405)
+                .json({ ok: false, message: "POST만 가능합니다." });
+        }
+
+        try {
+            const body = req.body || {};
+            const sessionId = (body.sessionId || "").toString().trim();
+
+            if (!sessionId) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "sessionId가 필요합니다.",
+                });
+            }
+
+            const sessionDocRef = sessionsRef.doc(sessionId);
+            const sessSnap = await sessionDocRef.get();
+
+            if (!sessSnap.exists) {
+                return res.status(404).json({
+                    ok: false,
+                    message: "세션이 존재하지 않습니다.",
+                });
+            }
+
+            const sessData = sessSnap.data() || {};
+            const stageNum = Number(sessData.choiceStage || 0);
+            const groupId = (sessData.choiceGroupId || "").toString();
+            const roundId = (sessData.choiceRoundId || "").toString();
+            const option = (sessData.choiceOption || "").toString();
+
+            if (!stageNum || !groupId || !roundId || !option) {
+                return res.status(400).json({
+                    ok: false,
+                    message:
+                        "현재 대기 중인 CHOICE 선택 정보가 없습니다. 먼저 선택을 완료해주세요.",
+                });
+            }
+
+            const problem = findProblem(stageNum);
+            if (!problem) {
+                return res
+                    .status(404)
+                    .json({ ok: false, message: "존재하지 않는 문제입니다." });
+            }
+
+            if ((problem.type || "INPUT").toUpperCase() !== "CHOICE") {
+                return res.status(400).json({
+                    ok: false,
+                    message: "이 문제는 CHOICE 타입이 아닙니다.",
+                });
+            }
+
+            const cfg = problem.choiceConfig || {};
+            const mode = (cfg.mode || "MINORITY_GO_NEXT").toUpperCase();
+            const windowMs = Number(cfg.windowMs || 60000);
+
+            const roundStartMs = Number(roundId);
+            if (!Number.isFinite(roundStartMs) || roundStartMs <= 0) {
+                // roundId가 이상하게 저장된 경우 방어
+                return res.status(400).json({
+                    ok: false,
+                    message: "라운드 정보가 올바르지 않습니다.",
+                });
+            }
+
+            const windowEndMs = roundStartMs + windowMs;
+            const nowMs = Date.now();
+
+            // 아직 집계 시간이 지나지 않음 → 계속 대기
+            if (nowMs < windowEndMs) {
+                return res.json({
+                    ok: true,
+                    status: "PENDING",
+                    waitMs: windowEndMs - nowMs,
+                });
+            }
+
+            // 집계 시간 지난 뒤 → 라운드 문서 읽어서 승자 계산
+            const roundDocId = `${groupId}_${stageNum}_${roundId}`;
+            const roundDocRef = choiceRoundsRef.doc(roundDocId);
+            const roundSnap = await roundDocRef.get();
+
+            if (!roundSnap.exists) {
+                // 이론상 거의 없겠지만, 방어용으로 PENDING처럼 처리
+                return res.json({
+                    ok: true,
+                    status: "PENDING",
+                    waitMs: 5000,
+                });
+            }
+
+            const roundData = roundSnap.data() || {};
+            const rawCounts = roundData.counts || {};
+
+            // counts가 진짜 객체인지 한 번 더 방어
+            const counts =
+                rawCounts && typeof rawCounts === "object" ? rawCounts : {};
+
+            // 🔥 문제에 정의된 모든 옵션 기준으로 0포함해서 카운트 만들기
+            const optionIds = (problem.options || []).map((o) => o.id);
+            const countsAll = {};
+            optionIds.forEach((id) => {
+                countsAll[id] = Number(counts[id] || 0);
+            });
+
+            const entriesAll = Object.entries(countsAll); // 예: [["A",1],["B",0]]
+
+            // 전체 투표 수
+            const totalVotes = entriesAll.reduce(
+                (sum, [, v]) => sum + Number(v || 0),
+                0,
+            );
+
+            // 이론상 totalVotes가 0인 케이스는 거의 없지만 방어코드
+            if (totalVotes <= 0) {
+                return res.json({
+                    ok: true,
+                    status: "DRAW",
+                    currentStage: stageNum,
+                    winningOption: null,
+                    reason: "NO_VOTES",
+                });
+            }
+
+            // 1표 이상 받은 옵션들만
+            const positiveEntries = entriesAll.filter(([, v]) => Number(v || 0) > 0);
+            const positiveOptionCount = positiveEntries.length;
+
+            // 🔥 한쪽만 선택된 경우 (A:1 B:0, A:2 B:0, A:5 B:0 등 전부 포함)
+            //  → 모두 같은 곳을 골랐으므로 "다수"로 보고 전원 탈락(LOSE)
+            //  → 아무도 다음 스테이지로 이동하지 않음
+            if (positiveOptionCount === 1) {
+                const onlyOptionId = positiveEntries[0][0]; // 예: "A"
+                const myCount = Number(countsAll[option] || 0);
+
+                if (option === onlyOptionId && myCount > 0) {
+                    // 내가 그 유일한(=다수) 옵션을 고른 사람 중 하나
+                    return res.json({
+                        ok: true,
+                        status: "LOSE",
+                        currentStage: stageNum,
+                        winningOption: null,
+                        reason: "ONLY_ONE_OPTION_CHOSEN",
+                    });
+                } else {
+                    // 이론상 거의 없지만, 내가 표를 안 던졌거나 이상한 상태면 무승부 처리
+                    return res.json({
+                        ok: true,
+                        status: "DRAW",
+                        currentStage: stageNum,
+                        winningOption: null,
+                        reason: "ONLY_ONE_OPTION_CHOSEN_BUT_NO_VOTE",
+                    });
+                }
+            }
+
+            // 여기부터는 0도 포함해서 MINORITY/MAJORITY 계산
+            let targetCount = null;
+            entriesAll.forEach(([, v]) => {
+                const c = Number(v || 0);
+
+                if (targetCount == null) {
+                    targetCount = c;
+                    return;
+                }
+
+                if (mode === "MAJORITY_GO_NEXT") {
+                    // 다수 통과 모드라면 최댓값 찾기
+                    if (c > targetCount) targetCount = c;
+                } else {
+                    // 기본: MINORITY_GO_NEXT → 최솟값 찾기
+                    if (c < targetCount) targetCount = c;
+                }
+            });
+
+            // targetCount 와 같은 옵션들 모두 찾기
+            const winners = entriesAll
+                .filter(([, v]) => Number(v || 0) === targetCount)
+                .map(([k]) => k);
+
+            // 🔥 동률이면 무승부 (예: A:1, B:1 같은 케이스)
+            if (winners.length !== 1) {
+                return res.json({
+                    ok: true,
+                    status: "DRAW",
+                    currentStage: stageNum,
+                    winningOption: null,
+                });
+            }
+
+            const winningOption = winners[0];
+
+            // 🔥 winningOption 이 0표(아무도 그 쪽을 고르지 않음)면 → 무승부
+            //   예: A:1, B:0, MINORITY 모드면 원래는 B(0)가 승자이지만
+            //       B를 선택한 사람이 없으므로 아무도 통과시키지 않음
+            if (Number(countsAll[winningOption] || 0) === 0) {
+                return res.json({
+                    ok: true,
+                    status: "DRAW",
+                    currentStage: stageNum,
+                    winningOption: null,
+                    reason: "WINNER_HAS_NO_VOTES",
+                });
+            }
+
+            // resolved 플래그는 있으면 한 번만 기록
+            if (!roundData.resolved) {
+                await roundDocRef.set(
+                    {
+                        resolved: true,
+                        winningOption,
+                        resolvedAt: FieldValue.serverTimestamp(),
+                    },
+                    { merge: true },
+                );
+            }
+
+            const isWin = option === winningOption;
+
+            if (!isWin) {
+                // 패배 → 스테이지 그대로 유지
+                return res.json({
+                    ok: true,
+                    status: "LOSE",
+                    currentStage: stageNum,
+                    winningOption,
+                });
+            }
+
+            // 승리 → 다음 스테이지로 진행
+            const nextStageNum = stageNum + 1;
+            await updateStage(sessionId, nextStageNum);
+
+            const nextProblem = findProblem(nextStageNum);
+            const finished = !nextProblem;
+
+            return res.json({
+                ok: true,
+                status: "WIN",
+                currentStage: nextStageNum,
+                nextStage: nextStageNum,
+                finished,
+            });
+        } catch (e) {
+            console.error("choiceResult error:", e);
+            return res.status(500).json({
+                ok: false,
+                message: "CHOICE 결과 확인 중 서버 오류가 발생했습니다.",
+            });
+        }
+    },
+);

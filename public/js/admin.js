@@ -26,7 +26,7 @@ let prevRacePositions = {};
 let raceHorseMap = {}; // 기존 말 DOM 재사용
 
 let adminPassword = "";
-const AUTO_REFRESH_MS = 15000;
+const AUTO_REFRESH_MS = 20000;
 let autoTimer = null;
 let isLoading = false;
 

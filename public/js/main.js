@@ -10,6 +10,8 @@ if (!sessionId) {
     localStorage.setItem("escapeSessionId", sessionId);
 }
 
+window.escapeSessionId = sessionId;
+
 // ✅ 스테이지별 "내 도착 순위" & 문제 캐시
 let stageRanks = {};
 let stageCache = {};
@@ -85,6 +87,7 @@ let nextCooldown = 5;      // 다음 오답 때 적용될 쿨타임
 let cooldownUntil = null;   // 쿨타임 종료 시각 (timestamp ms)
 let cooldownStage = null;   // 쿨타임이 걸려있는 스테이지 번호
 let wrongCooldown = null;   // setInterval 핸들
+let currentProblemCtxCleanup = null;
 
 // 🔥 쿨타임 상태 저장/복구
 function saveCooldownState() {
@@ -276,7 +279,7 @@ function renderProblem(problem, options = {}) {
 
     currentStage = problem.stage;
 
-    // ✅ 라벨: 내 도착 순위 기준으로 표시
+    // ✅ 도착 순위 텍스트
     const key = String(problem.stage);
     let rank = problem.arrivalRank;
 
@@ -297,13 +300,35 @@ function renderProblem(problem, options = {}) {
 
     stageInfoEl.textContent = `${problem.stage}번 방입니다.${arrivalText}`;
 
+    // ✅ 여기서 이미지/타이틀/설명 무조건 세팅
     titleEl.textContent = problem.title || "";
     imgEl.src = problem.imageUrl || "";
     imgEl.style.display = problem.imageUrl ? "block" : "none";
     descEl.textContent = problem.description || "";
 
+    // 🔥 타입별 UI를 적용하기 위한 context
+    const ctx = {
+        inputRow,
+        answerInput,
+        submitBtn,
+        resultEl,
+        descEl,
+        _cleanup: currentProblemCtxCleanup,
+        submitAnswer: (forced) => submitAnswer(forced),
+    };
+
+    // ✅ 이전 타입별 UI가 있다면 정리
+    if (currentProblemCtxCleanup) {
+        try {
+            currentProblemCtxCleanup();
+        } catch (e) {
+            console.warn(e);
+        }
+        currentProblemCtxCleanup = null;
+    }
+
     if (isCleared) {
-        // ✅ 이미 클리어한 문제는 항상 입력 막고, 메시지도 고정
+        // 이미 클리어한 문제: 항상 인풋 disabled + 정답 보여주기
         inputRow.style.display = "flex";
         answerInput.disabled = true;
         submitBtn.disabled = true;
@@ -315,12 +340,12 @@ function renderProblem(problem, options = {}) {
         resultEl.style.color = "#4ade80";
         resultEl.textContent = "이미 클리어한 문제입니다.";
     } else {
+        // 아직 안 푼 문제 + 쿨타임 여부
+        const now = Date.now();
+
         inputRow.style.display = "flex";
         answerInput.value = "";
 
-        const now = Date.now();
-
-        // ✅ 이 스테이지에 대해서 쿨타임이 남아있는 경우
         if (
             cooldownUntil &&
             cooldownStage === problem.stage &&
@@ -336,12 +361,10 @@ function renderProblem(problem, options = {}) {
             resultEl.style.color = "#f97373";
             resultEl.textContent = `틀렸습니다! (${remaining}초 후 다시 시도 가능)`;
 
-            // 혹시 타이머가 끊겨 있으면 여기서 다시 시작
             if (!wrongCooldown) {
                 startCooldown(remaining, problem.stage);
             }
         } else {
-            // ✅ 쿨타임이 없으면 정상 입력 가능
             cooldownStage = null;
             cooldownUntil = null;
             if (wrongCooldown) {
@@ -355,6 +378,14 @@ function renderProblem(problem, options = {}) {
             submitBtn.disabled = false;
             resultEl.textContent = "";
             answerInput.focus();
+        }
+
+        // 🔥 타입별 UI 적용 (INPUT/TAP/CHOICE 등)
+        if (window.ProblemTypes && typeof window.ProblemTypes.apply === "function") {
+            window.ProblemTypes.apply(problem, ctx);
+            currentProblemCtxCleanup = ctx._cleanup || null;
+        } else {
+            currentProblemCtxCleanup = null;
         }
     }
 
@@ -402,10 +433,14 @@ async function loadProblem(stage) {
 
         const problem = {
             stage: problemStage,
+            type: data.type || "INPUT",
             title: data.title,
             imageUrl: data.imageUrl,
             description: data.description,
             answer: data.answer, // 이미 클리어한 문제의 정답 표시용
+            options: data.options || null,
+            tapConfig: data.tapConfig || null,
+            choiceConfig: data.choiceConfig || null,
         };
 
         if (typeof stageRanks[key] === "number" && stageRanks[key] > 0) {
@@ -464,8 +499,11 @@ async function showStage(stage) {
     }
 }
 
-async function submitAnswer() {
-    const answer = answerInput.value.trim();
+async function submitAnswer(forcedAnswer) {
+
+    const raw = forcedAnswer != null ? String(forcedAnswer) : answerInput.value;
+
+    const answer = raw.trim();
     if (!answer) {
         resultEl.style.color = "#f97373";
         resultEl.textContent = "정답을 입력해주세요.";
@@ -557,10 +595,14 @@ async function submitAnswer() {
 
                 const nextProblem = {
                     stage: np.stage,
+                    type: np.type || "INPUT",
                     title: np.title,
                     imageUrl: np.imageUrl,
                     description: np.description,
                     answer: np.answer,
+                    options: np.options || null,
+                    tapConfig: np.tapConfig || null,
+                    choiceConfig: np.choiceConfig || null,
                 };
 
                 const savedRank = stageRanks[key];
@@ -754,7 +796,7 @@ if (nicknameChangeBtn) {
 }
 
 
-submitBtn.addEventListener("click", submitAnswer);
+submitBtn.addEventListener("click", () => submitAnswer());
 
 answerInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -841,3 +883,6 @@ async function resetGame() {
 }
 
 resetBtn.addEventListener("click", resetGame);
+
+
+window.escapeShowStage = showStage;

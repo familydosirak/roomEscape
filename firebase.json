@@ -59,6 +59,20 @@
         }
       },
       {
+        "source": "/api/choiceVote",
+        "function": {
+          "functionId": "choiceVote",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/choiceResult",
+        "function": {
+          "functionId": "choiceResult",
+          "region": "asia-northeast1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

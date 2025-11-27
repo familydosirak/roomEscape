@@ -246,3 +246,25 @@ button:disabled {
 .hidden {
     display: none !important;
 }
+
+/* 선택형 문제 버튼들 */
+.choice-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.choice-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: #222;
+    color: #fff;
+    cursor: pointer;
+}
+
+.choice-btn:hover {
+    background: #333;
+}
