@@ -821,13 +821,14 @@ exports.adminPlayersImport = onRequest(
 );
 
 
-
 /**
  * 관리자용 스테이지 통계 초기화 API
  * POST /api/admin/resetStats
  *
- * stageStats 컬렉션을 싹 비움 → 다시 처음부터 1번째 도착
- * (sessions.currentStage 는 건드리지 않음)
+ * - stageStats 컬렉션 전체 삭제
+ * - stageClears 컬렉션 전체 삭제
+ * - sessions 컬렉션 전체 삭제  ➜ 모든 진행/닉네임/choice 상태 초기화
+ * - choiceRounds 컬렉션 전체 삭제 ➜ CHOICE 라운드 기록 초기화
  */
 exports.adminResetStats = onRequest(
     { region: "asia-northeast1" },
@@ -839,7 +840,6 @@ exports.adminResetStats = onRequest(
         }
 
         try {
-
             const pwd =
                 req.get("x-admin-password") ||
                 (req.query.adminPassword || "").toString();
@@ -864,18 +864,16 @@ exports.adminResetStats = onRequest(
                 batch.delete(doc.ref);
             });
 
-            // 3) 모든 세션 currentStage를 1로 초기화
+            // 3) choiceRounds 전체 삭제 (CHOICE 라운드 정보 초기화)
+            const choiceRoundsSnap = await choiceRoundsRef.get();
+            choiceRoundsSnap.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+
+            // 4) sessions 전체 삭제 (모든 참가자 진행/닉네임/선택 상태 초기화)
             const sessionsSnap = await sessionsRef.get();
             sessionsSnap.forEach((doc) => {
-                batch.set(
-                    doc.ref,
-                    {
-                        currentStage: 1,
-                        resetAt: FieldValue.serverTimestamp(),
-                        resetByAdmin: true,
-                    },
-                    { merge: true },
-                );
+                batch.delete(doc.ref);
             });
 
             await batch.commit();
@@ -883,7 +881,7 @@ exports.adminResetStats = onRequest(
             return res.json({
                 ok: true,
                 message:
-                    "스테이지 통계, 닉네임 기록, 모든 참가자의 진행도가 초기화되었습니다.",
+                    "스테이지 통계, 클리어 기록, 모든 세션이 초기화되었습니다.",
             });
         } catch (e) {
             console.error(e);
