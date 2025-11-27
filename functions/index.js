@@ -6,17 +6,26 @@ const admin = require("firebase-admin");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const problems = require("./problems"); // 분리된 문제 정의
 
-admin.initializeApp();
+const { PLAYER_MODE_ENABLED, ensureSessionAllowed, registerPlayer } = require("./players");
+
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
 const db = getFirestore();
 
 const sessionsRef = db.collection("sessions");
 const stageStatsRef = db.collection("stageStats");
 const stageClearsRef = db.collection("stageClears");
 const choiceRoundsRef = db.collection("choiceRounds");
+const playersRef = db.collection("players");
 
 const nicknameRegex = /^[가-힣a-zA-Z0-9_ ]+$/; // 닉네임 정규식: 한글, 영어, 숫자, 언더바, 공백 허용
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "mensaparty2025"; // 원하는 비번으로 변경
+
+
+
+console.log("### PLAYER_MODE_ENABLED =", PLAYER_MODE_ENABLED);
 
 /**
  * 특정 스테이지를 클리어한 인원 수(= 도착 순위)를 가져온다.
@@ -132,6 +141,15 @@ exports.problem = onRequest(
             const sessionId = req.query.sessionId || "";
             const nickname = (req.query.nickname || "").toString().trim(); // ✅ 닉네임 쿼리
 
+            const allowed = await ensureSessionAllowed(sessionId);
+            if (!allowed) {
+                return res.status(403).json({
+                    ok: false,
+                    code: "PLAYER_REG_REQUIRED",
+                    message: "참가자 등록을 먼저 진행해주세요.",
+                });
+            }
+
             const currentStage = await getCurrentStage(sessionId, nickname); // ✅ 닉네임 전달
 
             // stage=0 이면 "상태만 조회" (문제 내용 X)
@@ -243,6 +261,15 @@ exports.answer = onRequest(
                 return res.status(400).json({
                     ok: false,
                     message: "sessionId, stage, answer가 필요합니다.",
+                });
+            }
+
+            const allowed = await ensureSessionAllowed(sessionId);
+            if (!allowed) {
+                return res.status(403).json({
+                    ok: false,
+                    code: "PLAYER_REG_REQUIRED",
+                    message: "참가자 등록을 먼저 진행해주세요.",
                 });
             }
 
@@ -420,6 +447,15 @@ exports.reset = onRequest(
                     .json({ ok: false, message: "sessionId가 필요합니다." });
             }
 
+            const allowed = await ensureSessionAllowed(sessionId);
+            if (!allowed) {
+                return res.status(403).json({
+                    ok: false,
+                    code: "PLAYER_REG_REQUIRED",
+                    message: "참가자 등록을 먼저 진행해주세요.",
+                });
+            }
+
             // currentStage를 1로 초기화
             await sessionsRef.doc(sessionId).set(
                 {
@@ -584,7 +620,205 @@ exports.adminStats = onRequest(
     },
 );
 
+/**
+ * 관리자용 참가자 명단 CSV 다운로드
+ * GET /api/admin/playersExport
+ *
+ * players 컬렉션 전체를 CSV로 반환
+ * 컬럼: code,name,team,sessionId,used,registeredAt,lastSeenAt
+ */
+exports.adminPlayersExport = onRequest(
+    { region: "asia-northeast1" },
+    async (req, res) => {
+        if (req.method !== "GET") {
+            return res
+                .status(405)
+                .json({ ok: false, message: "GET만 가능합니다." });
+        }
 
+        try {
+            const pwd =
+                req.get("x-admin-password") ||
+                (req.query.adminPassword || "").toString();
+
+            if (pwd !== ADMIN_PASSWORD) {
+                return res
+                    .status(401)
+                    .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+            }
+
+            const snap = await playersRef.get();
+
+            const rows = [];
+            // 헤더
+            rows.push([
+                "code",
+                "name",
+                "team",
+                "sessionId",
+                "used",
+            ]);
+
+            const escapeCsv = (v) => {
+                if (v == null) return "";
+                let s = String(v);
+                // " 나 , 가 있으면 "로 감싸고 "를 ""로 이스케이프
+                if (s.includes('"') || s.includes(",") || s.includes("\n")) {
+                    s = '"' + s.replace(/"/g, '""') + '"';
+                }
+                return s;
+            };
+
+            snap.forEach((doc) => {
+                const d = doc.data() || {};
+                const code = d.code || doc.id;
+                const name = d.name || "";
+                const team = d.team || "";
+                const sessionId = d.sessionId || "";
+                const used = d.used ? "Y" : "N";
+
+                const tsToStr = (ts) => {
+                    if (!ts) return "";
+                    try {
+                        if (typeof ts.toDate === "function") {
+                            return ts.toDate().toISOString();
+                        }
+                    } catch (e) { }
+                    return "";
+                };
+
+                const registeredAt = tsToStr(d.registeredAt);
+                const lastSeenAt = tsToStr(d.lastSeenAt);
+
+                rows.push([
+                    code,
+                    name,
+                    team,
+                    sessionId,
+                    used,
+                ]);
+            });
+
+            const csv = rows
+                .map((cols) => cols.map(escapeCsv).join(","))
+                .join("\r\n");
+
+            res.setHeader(
+                "Content-Type",
+                "text/csv; charset=utf-8",
+            );
+            res.setHeader(
+                "Content-Disposition",
+                'attachment; filename="players.csv"',
+            );
+
+            // BOM 붙여서 엑셀에서 한글 안 깨지게
+            const bom = "\uFEFF";
+            return res.status(200).send(bom + csv);
+        } catch (e) {
+            console.error(e);
+            return res
+                .status(500)
+                .json({ ok: false, message: "참가자 명단을 내보내는 중 오류가 발생했습니다." });
+        }
+    },
+);
+
+/**
+ * 관리자용 참가자 명단 갱신
+ * POST /api/admin/playersImport
+ *
+ * body: { players: [{ code, name, team }] }
+ * → 기존 players 컬렉션 전체 삭제 후, 전달된 목록으로 다시 생성
+ */
+exports.adminPlayersImport = onRequest(
+    { region: "asia-northeast1" },
+    async (req, res) => {
+        if (req.method !== "POST") {
+            return res
+                .status(405)
+                .json({ ok: false, message: "POST만 가능합니다." });
+        }
+
+        try {
+            const pwd =
+                req.get("x-admin-password") ||
+                (req.query.adminPassword || "").toString();
+
+            if (pwd !== ADMIN_PASSWORD) {
+                return res
+                    .status(401)
+                    .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+            }
+
+            const body = req.body || {};
+            const players = Array.isArray(body.players) ? body.players : [];
+
+            if (!players.length) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "players 배열이 비어 있습니다.",
+                });
+            }
+
+            // 코드 기본 검증
+            const cleaned = [];
+            players.forEach((p) => {
+                const code = (p.code || "").toString().trim();
+                if (!code) return;
+                const name = (p.name || "").toString().trim();
+                const team = (p.team || "").toString().trim();
+                cleaned.push({ code, name, team });
+            });
+
+            if (!cleaned.length) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "유효한 code 값이 없습니다.",
+                });
+            }
+
+            // 🔥 여기서 컬렉션 전체를 새로 구성
+            // (인원 수가 500 넘지 않는다고 가정)
+            const batch = db.batch();
+
+            // 1) 기존 players 전체 삭제
+            const oldSnap = await playersRef.get();
+            oldSnap.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+
+            // 2) 새 players 추가 (used / sessionId 초기화)
+            const now = FieldValue.serverTimestamp();
+
+            cleaned.forEach((p) => {
+                const docRef = playersRef.doc(p.code);
+                batch.set(docRef, {
+                    code: p.code,
+                    name: p.name || p.code,
+                    team: p.team || null,
+                    used: false,
+                    sessionId: null,
+                    registeredAt: now,
+                    lastSeenAt: null,
+                });
+            });
+
+            await batch.commit();
+
+            return res.json({
+                ok: true,
+                message: "참가자 명단이 갱신되었습니다.",
+                count: cleaned.length,
+            });
+        } catch (e) {
+            console.error(e);
+            return res
+                .status(500)
+                .json({ ok: false, message: "참가자 명단을 갱신하는 중 서버 오류가 발생했습니다." });
+        }
+    },
+);
 
 
 
@@ -1191,9 +1425,6 @@ exports.choiceResult = onRequest(
 
             const winningOption = winners[0];
 
-            // 🔥 winningOption 이 0표(아무도 그 쪽을 고르지 않음)면 → 무승부
-            //   예: A:1, B:0, MINORITY 모드면 원래는 B(0)가 승자이지만
-            //       B를 선택한 사람이 없으므로 아무도 통과시키지 않음
             if (Number(countsAll[winningOption] || 0) === 0) {
                 return res.json({
                     ok: true,
@@ -1251,3 +1482,5 @@ exports.choiceResult = onRequest(
         }
     },
 );
+
+exports.registerPlayer = registerPlayer;

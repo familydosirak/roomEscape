@@ -427,3 +427,47 @@ td:nth-child(3) .tag-list {
         transform: translate(-50%, -50%) translateY(2px);
     }
 }
+
+.player-section {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--borderColor, #444);
+}
+
+.player-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+.player-upload-label {
+    display: inline-block;
+    padding: 8px 16px;
+    /* button 과 동일 */
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+
+    /* 모양은 살짝 다른 보조 버튼 느낌으로 */
+    background: #0f172a;
+    border: 1px solid #3b82f6;
+    color: #bfdbfe;
+}
+
+.player-upload-label:hover {
+    background: #1d4ed8;
+    color: #ffffff;
+}
+
+.player-tip {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 4px;
+}
+
+.hidden {
+    display: none;
+}

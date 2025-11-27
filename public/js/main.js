@@ -148,6 +148,16 @@ const nicknameInput = document.getElementById("nickname-input");
 const nicknameChangeBtn = document.getElementById("nickname-change-btn");
 const nicknameMsg = document.getElementById("nickname-message");
 
+// 참가자 선등록 상태
+let playerRegistered =
+    localStorage.getItem("escapePlayerRegistered") === "true";
+
+// 참가자 등록 화면 요소
+const playerScreen = document.getElementById("player-screen");
+const playerInput = document.getElementById("player-name-input");
+const playerBtn = document.getElementById("player-confirm-btn");
+const playerMsg = document.getElementById("player-message");
+
 const stageInfoEl = document.getElementById("stage-info");
 const titleEl = document.getElementById("problem-title");
 const imgEl = document.getElementById("problem-image");
@@ -164,6 +174,17 @@ const resetBtn = document.getElementById("reset-btn");
 let nickname = localStorage.getItem("escapeNickname") || "";
 if (nicknameInput && nickname) {
     nicknameInput.value = nickname;
+}
+
+function clearPlayerRegistration() {
+    try {
+        localStorage.removeItem("escapePlayerRegistered");
+        localStorage.removeItem("escapePlayerCode");
+        localStorage.removeItem("escapePlayerName");
+    } catch (e) {
+        console.warn("failed to clear player registration", e);
+    }
+    playerRegistered = false;
 }
 
 function updateNavButtons() {
@@ -392,6 +413,20 @@ function renderProblem(problem, options = {}) {
     updateNavButtons();
 }
 
+function updateScreenVisibility() {
+    if (!playerScreen || !mainScreen) return;
+
+    if (playerRegistered) {
+        // 참가자 등록이 끝났으면 바로 메인 화면
+        playerScreen.classList.add("hidden");
+        mainScreen.classList.remove("hidden");
+    } else {
+        // 참가자 등록 전에는 참가자 입력 화면부터
+        playerScreen.classList.remove("hidden");
+        mainScreen.classList.add("hidden");
+    }
+}
+
 // 특정 스테이지 문제를 서버에서 불러오는 함수
 async function loadProblem(stage) {
     resultEl.textContent = "";
@@ -411,10 +446,20 @@ async function loadProblem(stage) {
         const data = await res.json();
 
         if (!data.ok) {
-            alert(data.message || "이 단계에 접근할 수 없습니다.");
-            if (data.currentStage) {
-                maxUnlockedStage = data.currentStage;
-                loadProblem(data.currentStage);
+            // 🔥 참가자 등록이 필요하다고 서버가 알려준 경우
+            if (data.code === "PLAYER_REG_REQUIRED") {
+                clearPlayerRegistration();  // localStorage 비우고
+                updateScreenVisibility();   // player-screen 다시 보이게
+
+                // 게임 화면 보고 있었으면 메인으로 돌려보내고 안내
+                alert("참가자 등록 정보가 없어 다시 입력이 필요합니다.\n참가자 이름/코드를 다시 입력해주세요.");
+            } else {
+                // 원래 하던 동작 유지
+                alert(data.message || "이 단계에 접근할 수 없습니다.");
+                if (data.currentStage) {
+                    maxUnlockedStage = data.currentStage;
+                    loadProblem(data.currentStage);
+                }
             }
             return;
         }
@@ -636,6 +681,11 @@ async function startGame() {
     startBtn.disabled = true;
 
     try {
+        if (!playerRegistered) {
+            alert("먼저 참가자 이름/코드를 입력해 주세요.");
+            startBtn.disabled = false;
+            return;
+        }
         // ✅ 규칙 1: 아직 확정된 닉네임이 없으면 게임 시작 불가
         if (!nickname || !nickname.trim()) {
             alert("닉네임을 먼저 설정해주세요!");
@@ -670,10 +720,19 @@ async function startGame() {
         const data = await res.json();
 
         if (!data.ok) {
-            alert(data.message || "게임 상태를 가져오는 중 오류가 발생했습니다.");
+            // 🔥 참가자 등록이 필요하다고 서버가 알려주는 경우
+            if (data.code === "PLAYER_REG_REQUIRED") {
+                clearPlayerRegistration();      // localStorage 비우고
+                updateScreenVisibility();       // player-screen 다시 보이게
+                alert("참가자 등록 정보가 없어 다시 입력이 필요합니다.\n참가자 이름/코드를 다시 입력해주세요.");
+            } else {
+                alert(data.message || "게임 상태를 가져오는 중 오류가 발생했습니다.");
+            }
+
             startBtn.disabled = false;
             return;
         }
+
 
         if (typeof data.currentStage === "number") {
             maxUnlockedStage = data.currentStage;
@@ -777,7 +836,82 @@ async function applyNickname(rawNick) {
     }
 }
 
+// 🔥 참가자 선등록 API 호출
+async function registerPlayer() {
+    if (!playerInput || !playerBtn || !playerMsg) return;
 
+    const code = playerInput.value.trim();
+    if (!code) {
+        playerMsg.style.color = "#f97373";
+        playerMsg.textContent = "참가자 이름/코드를 입력해주세요. (예: 1-정호진)";
+        playerInput.focus();
+        return;
+    }
+
+    playerBtn.disabled = true;
+    playerMsg.style.color = "#9ca3af";
+    playerMsg.textContent = "참가자 확인 중...";
+
+    try {
+        const res = await fetch("/api/registerPlayer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId, playerCode: code }),
+        });
+
+        const data = await res.json();
+
+        // 🔧 서버에서 "모드가 꺼져있다"고 알려준 경우 → 이 기능 스킵
+        if (data.code === "PLAYER_MODE_DISABLED") {
+            playerRegistered = true;
+            localStorage.setItem("escapePlayerRegistered", "true");
+            playerMsg.textContent =
+                "참가자 사전등록 모드가 비활성화되어 있어 바로 진행합니다.";
+            updateScreenVisibility();
+            return;
+        }
+
+        if (!data.ok) {
+            playerMsg.style.color = "#f97373";
+            playerMsg.textContent = data.message || "참가자 확인에 실패했습니다.";
+            return;
+        }
+
+        // 성공
+        playerRegistered = true;
+        localStorage.setItem("escapePlayerRegistered", "true");
+        localStorage.setItem("escapePlayerCode", data.playerCode || code);
+        if (data.playerName) {
+            localStorage.setItem("escapePlayerName", data.playerName);
+        }
+
+        playerMsg.style.color = "#4ade80";
+        playerMsg.textContent = "참가자 확인이 완료되었습니다!";
+
+        updateScreenVisibility();
+    } catch (e) {
+        console.error(e);
+        playerMsg.style.color = "#f97373";
+        playerMsg.textContent = "참가자 등록 중 오류가 발생했습니다.";
+    } finally {
+        playerBtn.disabled = false;
+    }
+}
+
+if (playerBtn) {
+    playerBtn.addEventListener("click", registerPlayer);
+}
+
+if (playerInput) {
+    playerInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            if (!playerBtn.disabled) {
+                registerPlayer();
+            }
+        }
+    });
+}
 
 startBtn.addEventListener("click", startGame);
 
@@ -884,5 +1018,40 @@ async function resetGame() {
 
 resetBtn.addEventListener("click", resetGame);
 
+// 🔥 참가자 선등록 모드 자동 감지
+async function initPlayerMode() {
+    // 이미 로컬스토리지에 등록 완료로 찍혀 있으면 굳이 서버 안 두드려도 됨
+    if (playerRegistered) {
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/registerPlayer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            // PLAYER_MODE_ENABLED=false 인 경우에는 body가 뭐든 상관 없이
+            // 바로 PLAYER_MODE_DISABLED 응답을 돌려주므로 sessionId만 보냄
+            body: JSON.stringify({ sessionId }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        // ✅ 서버에서 "참가자 모드 꺼져 있음"이라고 알려준 경우
+        if (data && data.code === "PLAYER_MODE_DISABLED") {
+            playerRegistered = true;
+            localStorage.setItem("escapePlayerRegistered", "true");
+
+            // 참가자 화면 숨기고 바로 닉네임/시작 화면 보여주기
+            updateScreenVisibility();
+        }
+        // 그 외 (mode 켜져 있거나, playerCode 없어서 400 등)는 그냥 무시 → 기존 로직 유지
+    } catch (e) {
+        console.error("initPlayerMode error:", e);
+        // 에러 났을 때는 그냥 기존 로직 유지 (참가자 화면 보여줌)
+    }
+}
+
+updateScreenVisibility();
+initPlayerMode();
 
 window.escapeShowStage = showStage;

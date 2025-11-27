@@ -9,8 +9,25 @@
 </head>
 
 <body>
+  <div id="player-screen" class="container">
+    <h1>참가자 확인</h1>
+    <p class="subtitle">
+      "팀번호-이름"을 입력해주세요. (예: 1-정호진)
+    </p>
+
+    <div class="nickname-row">
+      <label for="player-name-input">참가자 이름 / 코드</label>
+      <div class="nickname-input-wrap">
+        <input id="player-name-input" type="text" />
+        <button id="player-confirm-btn" class="secondary-btn">
+          확인
+        </button>
+      </div>
+      <div id="player-message" class="nickname-message"></div>
+    </div>
+  </div>
   <!-- 메인 화면 -->
-  <div id="main-screen" class="container">
+  <div id="main-screen" class="container hidden">
     <h1>멘사코리아 방탈출</h1>
     <p class="subtitle">
       방 안에 숨겨진 단서를 찾아 정답을 입력해 탈출해보세요!
@@ -58,7 +75,7 @@
       처음부터 다시 하기
     </button>
   </div>
-  
+
   <script src="/js/problemTypes.js" defer></script>
   <script src="/js/main.js" defer></script>
 </body>

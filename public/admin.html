@@ -66,6 +66,28 @@
                 <div id="clear-list"></div>
             </div>
 
+            <div class="player-section">
+                <h2>참가자 명단 관리</h2>
+                <p class="player-desc">
+                    참가자 명단을 CSV(엑셀) 파일로 내려받거나, CSV 파일을 업로드해서 갱신할 수 있습니다.
+                </p>
+
+                <div class="player-actions">
+                    <button id="players-export-btn" class="btn-primary">
+                        참가자 명단 다운로드
+                    </button>
+
+                    <!-- 파일 업로드는 숨겨놓고 라벨 버튼으로 트리거 -->
+                    <label for="players-file-input" class="btn-primary player-upload-label">
+                        CSV 업로드로 명단 갱신
+                    </label>
+                    <input id="players-file-input" type="file" accept=".csv" class="hidden" />
+
+                    <span id="players-import-status" class="status-text"></span>
+                </div>
+
+            </div>
+
         </div><!-- admin-container 끝 -->
     </div>
 

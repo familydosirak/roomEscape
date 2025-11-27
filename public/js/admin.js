@@ -17,6 +17,10 @@ const adminLockMsg = document.getElementById("admin-lock-msg");
 const raceTrackEl = document.getElementById("race-track");
 const raceTitleEl = document.getElementById("race-title");
 
+const playersExportBtn = document.getElementById("players-export-btn");
+const playersFileInput = document.getElementById("players-file-input");
+const playersImportStatus = document.getElementById("players-import-status");
+
 /* =========================================================
 🐎 전역 저장소 — “이전 위치” 기억 → 추월 애니메이션에 사용
 예: prevRacePositions["홍길동"] = 0.85
@@ -472,8 +476,175 @@ function stopAutoRefresh() {
     autoTimer = null;
 }
 
+
 /* =========================================================
-   7. 이벤트
+   7. 명단관리
+   ========================================================= */
+
+
+function parsePlayersCsv(text) {
+    const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+    if (!lines.length) return [];
+
+    const header = lines[0].split(",").map((s) => s.trim().toLowerCase());
+
+    const idxCode = header.indexOf("code");
+    const idxName = header.indexOf("name");
+    const idxTeam = header.indexOf("team");
+
+    if (idxCode === -1) {
+        throw new Error("CSV 헤더에 code 컬럼이 없습니다.");
+    }
+    if (idxName === -1) {
+        throw new Error("CSV 헤더에 name 컬럼이 없습니다.");
+    }
+
+    const players = [];
+
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line) continue;
+
+        const cols = line.split(",");
+        const code = (cols[idxCode] || "").trim();
+        if (!code) continue;
+
+        const name = (cols[idxName] || "").trim();
+        const team = idxTeam >= 0 ? (cols[idxTeam] || "").trim() : "";
+
+        players.push({ code, name, team });
+    }
+
+    return players;
+}
+
+async function exportPlayersCsv() {
+    if (!adminPassword) {
+        showLockScreen();
+        return;
+    }
+
+    try {
+        playersImportStatus.textContent = "참가자 명단 내려받는 중...";
+
+        const res = await fetch("/api/admin/playersExport", {
+            headers: {
+                "X-Admin-Password": adminPassword,
+            },
+        });
+
+        if (res.status === 401) {
+            showLockScreen();
+            return;
+        }
+
+        if (!res.ok) {
+            playersImportStatus.textContent =
+                "참가자 명단 내려받기 실패";
+            return;
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        const dateStr = new Date()
+            .toISOString()
+            .slice(0, 10)
+            .replace(/-/g, "");
+        a.download = `players_${dateStr}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        playersImportStatus.textContent =
+            "참가자 명단 CSV를 다운로드했습니다.";
+    } catch (e) {
+        console.error(e);
+        playersImportStatus.textContent =
+            "참가자 명단 내려받기 중 오류가 발생했습니다.";
+    }
+}
+
+function handlePlayersFileChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!adminPassword) {
+        showLockScreen();
+        playersFileInput.value = "";
+        return;
+    }
+
+    playersImportStatus.textContent = "CSV를 읽는 중...";
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+        try {
+            const text = reader.result;
+            const players = parsePlayersCsv(text);
+
+            if (!players.length) {
+                playersImportStatus.textContent =
+                    "CSV에서 유효한 참가자 데이터가 없습니다.";
+                return;
+            }
+
+            playersImportStatus.textContent =
+                "서버로 업로드 중...";
+
+            const res = await fetch("/api/admin/playersImport", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Admin-Password": adminPassword,
+                },
+                body: JSON.stringify({ players }),
+            });
+
+            if (res.status === 401) {
+                showLockScreen();
+                return;
+            }
+
+            const data = await res.json();
+
+            if (!data.ok) {
+                playersImportStatus.textContent =
+                    data.message || "참가자 명단 갱신 실패";
+                return;
+            }
+
+            playersImportStatus.textContent =
+                `참가자 명단 갱신 완료 (총 ${data.count}명)`;
+        } catch (err) {
+            console.error(err);
+            playersImportStatus.textContent =
+                "CSV 업로드/파싱 중 오류가 발생했습니다.";
+        } finally {
+            // 같은 파일 다시 선택해도 change 이벤트가 뜨도록 리셋
+            playersFileInput.value = "";
+        }
+    };
+
+    reader.onerror = () => {
+        playersImportStatus.textContent =
+            "파일을 읽는 중 오류가 발생했습니다.";
+        playersFileInput.value = "";
+    };
+
+    reader.readAsText(file, "utf-8");
+}
+
+
+/* =========================================================
+   8. 이벤트
    ========================================================= */
 
 refreshBtn.addEventListener("click", loadStats);
@@ -490,3 +661,14 @@ adminPwdInput.addEventListener("keydown", (e) => {
         handleAdminLogin();
     }
 });
+if (playersExportBtn) {
+    playersExportBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        exportPlayersCsv();
+    });
+}
+
+if (playersFileInput) {
+    playersFileInput.addEventListener("change", handlePlayersFileChange);
+}
+

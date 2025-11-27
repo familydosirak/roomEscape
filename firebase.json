@@ -73,6 +73,27 @@
         }
       },
       {
+        "source": "/api/registerPlayer",
+        "function": {
+          "functionId": "registerPlayer",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/admin/playersExport",
+        "function": {
+          "functionId": "adminPlayersExport",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/admin/playersImport",
+        "function": {
+          "functionId": "adminPlayersImport",
+          "region": "asia-northeast1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
