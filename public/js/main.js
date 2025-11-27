@@ -877,25 +877,29 @@ async function registerPlayer() {
             return;
         }
 
-        localStorage.clear();
+
 
         // 다시 필요한 정보만 저장
         playerRegistered = true;
         localStorage.setItem("escapePlayerRegistered", "true");
         localStorage.setItem("escapePlayerCode", data.playerCode || code);
 
+
+        // 닉네임도 반드시 새로 입력하도록 초기화
+        nickname = "";
+        localStorage.removeItem("escapeNickname");
+        if (nicknameInput) nicknameInput.value = "";
+
         if (data.playerName) {
             localStorage.setItem("escapePlayerName", data.playerName);
         }
 
-        // 닉네임도 반드시 새로 입력하도록 초기화
-        localStorage.removeItem("escapeNickname");
 
         playerMsg.style.color = "#4ade80";
         playerMsg.textContent = "참가자 확인이 완료되었습니다!";
 
         updateScreenVisibility();
-        
+
     } catch (e) {
         console.error(e);
         playerMsg.style.color = "#f97373";
