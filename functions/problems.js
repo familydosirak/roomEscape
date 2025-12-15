@@ -5,30 +5,17 @@ const problems = [
     {
         stage: 1,
         type: "INPUT", // 기본: 텍스트 정답 입력
-        title: "1번 방",
+        title: "", //제목
         imageUrl: "/img/q1.png",
-        description: "첫 번째 방입니다. 이미지 속 단서를 보고 정답을 적어보세요.",
-        answer: "APPLE",
+        description: "", //내용
+        answer: "UNDERTABLE",
     },
     {
         stage: 2,
-        type: "TAP", // 🔥 화면을 여러 번 터치해야 통과
-        title: "2번 방 - 화면 두드리기",
-        imageUrl: "/img/q2.png",
-        description: "화면을 10번 두드리면 다음 방으로 넘어갑니다.",
-        // TAP형도 결국 서버에는 문자열로 정답을 저장해둠 (유저는 이 값은 몰라)
-        answer: "TAP_10", 
-        tapConfig: {
-            requiredTaps: 10,     // 필요한 터치 횟수
-            resetAfterMs: 5000, // (옵션) 10초 지나면 카운트 초기화
-        },
-    },
-    {
-        stage: 3,
         type: "CHOICE", // 🔥 A/B 선택형 문제
-        title: "3번 방 - A / B 선택",
-        imageUrl: "/img/q3.png",
-        description: "둘 중 하나를 선택하세요. 어떤 선택이 기다리고 있을까요?",
+        title: "",
+        imageUrl: "/img/q2.png",
+        description: "",
         // 사용자가 클릭했을 때 서버로 보내질 값들
         options: [
             { id: "A", label: "A 방" },
@@ -51,21 +38,110 @@ const problems = [
         },
     },
     {
+        stage: 3,
+        type: "UPDOWN",
+        title: "",
+        imageUrl: "/img/q3.png",
+        description: "",
+        answer: "517",
+        updownConfig: {
+            min: 1,
+            max: 999,
+        },
+    },
+    {
         stage: 4,
-        type: "INPUT",
-        title: "4번 방",
+        type: "PATTERN",
+        title: "",
         imageUrl: "/img/q4.png",
-        description: "네 번째 문제입니다.",
-        answer: "PEACH",
+        description: "",
+        // 예시 정답(16칸): 1/0 문자열로 저장
+        // 0 1 2 3
+        // 4 5 6 7
+        // 8 9 10 11
+        // 12 13 14 15
+        answer: "1011010110101101",
+        patternConfig: {
+            rows: 4,
+            cols: 4,
+        },
     },
     {
         stage: 5,
         type: "INPUT",
-        title: "5번 방",
+        title: "",
         imageUrl: "/img/q5.png",
-        description: "다섯 번째 문제입니다.",
-        answer: "TOMATO",
+        description: "",
+        answer: "76",
     },
+    {
+        stage: 6,
+        type: "INPUT",
+        title: "",
+        imageUrl: "/img/q6.png",
+        description: "",
+        answer: "light",
+    },
+    {
+        stage: 7,
+        type: "TAP", // 🔥 화면을 여러 번 터치해야 통과
+        title: "",
+        imageUrl: "/img/q7.png",
+        description: "",
+        // TAP형도 결국 서버에는 문자열로 정답을 저장해둠 (유저는 이 값은 몰라)
+        answer: "TAP_10",
+        tapConfig: {
+            requiredTaps: 10,     // 필요한 터치 횟수
+            resetAfterMs: 5000, // (옵션) 10초 지나면 카운트 초기화
+        },
+    },
+    {
+        stage: 8,
+        type: "INPUT",
+        title: "",
+        imageUrl: "/img/q8.png",
+        description: "",
+        answer: "arboris",
+    },
+    {
+        stage: 9,
+        type: "MAZE",
+        title: "",
+        imageUrl: "/img/q9.png",
+        description: "",
+        answer: "<><>><><><><><><<><>><>><<<><>",
+        mazeConfig: {
+            leftSymbol: "<",
+            rightSymbol: ">",
+            lockOnWrong: true,     // 틀리면 막혀서 초기화만 가능
+            showProgress: true,    // 진행 표시
+        },
+    },
+    {
+        stage: 10,
+        type: "INPUT",
+        title: "",
+        imageUrl: "/img/q10.png",
+        description: "",
+        answer: "75",
+    },
+    {
+        stage: 11,
+        type: "INPUT",
+        title: "",
+        imageUrl: "/img/q11.png",
+        description: "",
+        answer: "light",
+    },
+    {
+        stage: 12,
+        type: "INPUT",
+        title: "",
+        imageUrl: "/img/q12.png",
+        description: "",
+        answer: "WIN",
+    },
+
 ];
 
 module.exports = problems;

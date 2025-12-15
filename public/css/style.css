@@ -98,15 +98,6 @@ h1 {
     text-align: center;
 }
 
-#problem-image {
-    width: 100%;
-    max-height: 260px;
-    object-fit: contain;
-    border-radius: 8px;
-    background: #000;
-    margin-bottom: 12px;
-}
-
 #problem-desc {
     font-size: 14px;
     color: #ccc;
@@ -267,4 +258,287 @@ button:disabled {
 
 .choice-btn:hover {
     background: #333;
+}
+
+
+/* ===========================
+   ✅ 게임 화면(이미지+입력칸 폭 맞춤)
+   - 모바일: 화면 꽉(100%)
+   - PC(768px+): 가운데 정렬 + 적당 폭 제한
+   =========================== */
+
+/* 게임 화면: 카드 효과 제거, 배경만 깔기 */
+#game-screen {
+    width: 100%;
+    max-width: none;
+    min-height: 100vh;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #191919;
+}
+
+/* 모바일 기본: 이미지/입력칸이 화면 폭에 딱 맞게 */
+#game-screen .stage-wrap {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+/* PC/태블릿: 너무 와이드해지지 않게 가운데 기둥으로 제한 */
+@media (min-width: 768px) {
+    #game-screen .stage-wrap {
+        max-width: 440px;
+        /* ✅ 여기만 취향대로 420~480으로 조절 */
+        margin: 0 auto;
+    }
+}
+
+/* 이미지: 잘리지 않게(포스터 느낌), 세로 제한 없음(스크롤 허용) */
+#game-screen #problem-image {
+    width: 100%;
+    height: auto;
+    max-height: none;
+    /* ✅ 세로 제한 제거 */
+    display: block;
+    margin: 0;
+    object-fit: contain;
+    /* ✅ 모바일에서 잘림 없이 */
+    background: #191919;
+    border-radius: 0;
+}
+
+/* 이미지 아래 UI: 이미지와 동일 폭 */
+#game-screen .game-content {
+    width: 100%;
+    padding: 16px;
+    background: #191919;
+}
+
+/* stage-info/네비 간격 다듬기 */
+#stage-info {
+    margin: 4px 0 10px;
+}
+
+#game-screen .nav-row {
+    margin: 0 0 12px;
+}
+
+.pattern-wrap {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.pattern-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.pattern-cell {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.pattern-cell.on {
+    background: rgba(74, 222, 128, 0.9);
+    /* 초록 느낌 */
+    border-color: rgba(74, 222, 128, 1);
+}
+
+.pattern-btn-row {
+    display: flex;
+    gap: 10px;
+}
+
+.pattern-btn {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 0;
+}
+
+.pattern-btn.primary {
+    font-weight: 700;
+}
+
+/* ==========================
+   라이트 테마
+   body.theme-light 붙으면 적용
+   ========================== */
+
+body.theme-light {
+    background: #FFFFFF;
+    color: #111;
+}
+
+/* 카드/게임 배경 */
+body.theme-light .container {
+    background: #ffffff;
+    color: #111;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+body.theme-light #game-screen {
+    background: #FFFFFF;
+}
+
+body.theme-light #game-screen .game-content {
+    background: #FFFFFF;
+}
+
+/* 텍스트 톤 */
+body.theme-light .subtitle,
+body.theme-light #problem-desc,
+body.theme-light #stage-info,
+body.theme-light .nickname-message {
+    color: #555;
+}
+
+/* 입력 */
+body.theme-light input[type="text"] {
+    background: #fff;
+    color: #111;
+    border: 1px solid #ddd;
+}
+
+/* 기본 버튼(공통 button 규칙 덮어씀) */
+body.theme-light button {
+    background: #111;
+    color: #fff;
+}
+
+body.theme-light button:hover:not(:disabled) {
+    background: #222;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+}
+
+/* nav 버튼 */
+body.theme-light .nav-btn {
+    border: 1px solid #ccc;
+    color: #333;
+    background: transparent;
+}
+
+/* secondary 버튼 */
+body.theme-light .secondary-btn {
+    border: 1px solid #ccc;
+    background: #fff;
+    color: #111;
+}
+
+/* 결과 메시지(에러/성공) */
+body.theme-light #result-message {
+    color: #d11a2a;
+}
+
+body.theme-light #finish-message {
+    color: #0f7a2a;
+}
+
+/* 패턴 UI도 라이트에 맞춤 */
+body.theme-light .pattern-cell {
+    border: 2px solid rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.04);
+}
+
+body.theme-light .pattern-cell.on {
+    background: rgba(34, 197, 94, 0.85);
+    border-color: rgba(34, 197, 94, 1);
+}
+
+/* ✅ stage8 진입: "검정에서 천천히 밝아짐" */
+body.theme-fade::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* 시작은 완전 검정(즉시) */
+body.theme-fade.fade-start::before {
+    opacity: 1;
+}
+
+/* 천천히 밝아지며 사라짐 */
+body.theme-fade.fade-reveal::before {
+    opacity: 0;
+    transition: opacity 4000ms cubic-bezier(0.18, 0.9, 0.2, 1);
+}
+
+
+.maze-wrap {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.maze-progress-text {
+    font-size: 12px;
+    color: #9ca3af;
+    text-align: center;
+}
+
+.maze-progress {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.maze-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.maze-dot.filled {
+    background: rgba(96, 165, 250, 0.9);
+    border-color: rgba(96, 165, 250, 1);
+}
+
+.maze-btn-row {
+    padding-bottom: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+.maze-btn {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 0;
+}
+
+.maze-btn.secondary {
+    background: transparent;
+    border: 1px solid #444;
+    color: #000000;
+}
+
+.maze-display {
+    height: 40px;
+    font-size: 12px;
+    color: #000000;
+    text-align: center;
+    padding: 10px 12px;
+    border: 1px solid #333;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    word-break: break-all;
+}
+
+.maze-btn.primary {
+    font-weight: 700;
 }

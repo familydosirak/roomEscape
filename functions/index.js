@@ -223,6 +223,12 @@ exports.problem = onRequest(
             if (problem.choiceConfig) {
                 payload.choiceConfig = problem.choiceConfig;
             }
+            if (problem.patternConfig) {
+                payload.patternConfig = problem.patternConfig;
+            }
+            if (problem.mazeConfig) {
+                payload.mazeConfig = problem.mazeConfig;
+            }
 
             payload.arrivalRank = await getStageClearCount(stage);
 
@@ -302,6 +308,38 @@ exports.answer = onRequest(
                     .json({ ok: false, message: "존재하지 않는 문제입니다." });
             }
 
+            const type = (problem.type || "INPUT").toUpperCase();
+
+            // ✅ UPDOWN 타입: 숫자 비교로 힌트 내려주기
+            if (type === "UPDOWN") {
+                const guess = Number(String(answer).trim());
+                const target = Number(String(problem.answer).trim());
+
+                if (!Number.isFinite(guess)) {
+                    return res.json({
+                        ok: true,
+                        correct: false,
+                        hint: "INVALID",
+                        message: "숫자만 입력해주세요.",
+                        currentStage,
+                    });
+                }
+
+                if (guess === target) {
+                    // 정답 처리 → 아래 공통 정답 로직으로 이어지게
+                } else {
+                    const hint = guess < target ? "UP" : "DOWN";
+                    return res.json({
+                        ok: true,
+                        correct: false,
+                        hint, // "UP" | "DOWN"
+                        message: hint === "UP" ? "UP (더 큰 수)" : "DOWN (더 작은 수)",
+                        currentStage,
+                    });
+                }
+            }
+
+            // ✅ 기본 타입: 기존대로 문자열 비교
             const isCorrect =
                 normalizeAnswer(answer) === normalizeAnswer(problem.answer);
 
@@ -403,6 +441,9 @@ exports.answer = onRequest(
             }
             if (nextProblem.choiceConfig) {
                 nextProblemPayload.choiceConfig = nextProblem.choiceConfig;
+            }
+            if (nextProblem && nextProblem.mazeConfig) {
+                nextProblemPayload.mazeConfig = nextProblem.mazeConfig;
             }
 
             return res.json({
@@ -1346,11 +1387,19 @@ exports.choiceResult = onRequest(
 
             // 이론상 totalVotes가 0인 케이스는 거의 없지만 방어코드
             if (totalVotes <= 0) {
+                const nextStageNum = stageNum + 1;
+                await updateStage(sessionId, nextStageNum);
+
+                const nextProblem = findProblem(nextStageNum);
+                const finished = !nextProblem;
+
                 return res.json({
                     ok: true,
-                    status: "DRAW",
-                    currentStage: stageNum,
-                    winningOption: null,
+                    status: "WIN",
+                    currentStage: nextStageNum,
+                    nextStage: nextStageNum,
+                    finished,
+                    draw: true,
                     reason: "NO_VOTES",
                 });
             }
@@ -1377,11 +1426,19 @@ exports.choiceResult = onRequest(
                     });
                 } else {
                     // 이론상 거의 없지만, 내가 표를 안 던졌거나 이상한 상태면 무승부 처리
+                    const nextStageNum = stageNum + 1;
+                    await updateStage(sessionId, nextStageNum);
+
+                    const nextProblem = findProblem(nextStageNum);
+                    const finished = !nextProblem;
+
                     return res.json({
                         ok: true,
-                        status: "DRAW",
-                        currentStage: stageNum,
-                        winningOption: null,
+                        status: "WIN",
+                        currentStage: nextStageNum,
+                        nextStage: nextStageNum,
+                        finished,
+                        draw: true,
                         reason: "ONLY_ONE_OPTION_CHOSEN_BUT_NO_VOTE",
                     });
                 }
@@ -1411,24 +1468,43 @@ exports.choiceResult = onRequest(
                 .filter(([, v]) => Number(v || 0) === targetCount)
                 .map(([k]) => k);
 
-            // 🔥 동률이면 무승부 (예: A:1, B:1 같은 케이스)
+            // 🔥 동률이면 무승부 => 성공 처리로 다음 스테이지로 보냄
             if (winners.length !== 1) {
+                const nextStageNum = stageNum + 1;
+                await updateStage(sessionId, nextStageNum);
+
+                const nextProblem = findProblem(nextStageNum);
+                const finished = !nextProblem;
+
                 return res.json({
                     ok: true,
-                    status: "DRAW",
-                    currentStage: stageNum,
-                    winningOption: null,
+                    status: "WIN",          // ✅ WIN으로 내려서 프론트가 확실히 이동하게
+                    currentStage: nextStageNum,
+                    nextStage: nextStageNum,
+                    finished,
+                    draw: true,             // (표시용)
+                    tie: true,              // (표시용: 너 프론트가 tie 문구 지원함) :contentReference[oaicite:1]{index=1}
+                    winningOptions: winners,
+                    reason: "TIE",
                 });
             }
 
             const winningOption = winners[0];
 
             if (Number(countsAll[winningOption] || 0) === 0) {
+                const nextStageNum = stageNum + 1;
+                await updateStage(sessionId, nextStageNum);
+
+                const nextProblem = findProblem(nextStageNum);
+                const finished = !nextProblem;
+
                 return res.json({
                     ok: true,
-                    status: "DRAW",
-                    currentStage: stageNum,
-                    winningOption: null,
+                    status: "WIN",
+                    currentStage: nextStageNum,
+                    nextStage: nextStageNum,
+                    finished,
+                    draw: true,
                     reason: "WINNER_HAS_NO_VOTES",
                 });
             }

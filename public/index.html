@@ -12,7 +12,7 @@
   <div id="player-screen" class="container">
     <h1>참가자 확인</h1>
     <p class="subtitle">
-      "팀번호-이름"을 입력해주세요. (예: 1-정호진)<br/>
+      "팀번호-이름"을 입력해주세요. (예: 1-정호진)<br />
       절대 다른 사람의 이름을 도용하지 마세요!
     </p>
 
@@ -50,31 +50,34 @@
   </div>
 
 
-  <!-- 게임 화면 -->
   <div id="game-screen" class="container hidden">
-    <h1>멘사코리아 방탈출</h1>
-    <div id="stage-info"></div>
+    <div class="stage-wrap">
+      <img id="problem-image" alt="문제 이미지" />
 
-    <div class="nav-row">
-      <button id="prev-btn" class="nav-btn" disabled>이전 문제</button>
-      <button id="next-btn" class="nav-btn" disabled>다음 문제</button>
+      <div class="game-content">
+        <div class="" id="stage-info"></div>
+
+        <div class="nav-row">
+          <button id="prev-btn" class="nav-btn" disabled>이전 문제</button>
+          <button id="next-btn" class="nav-btn" disabled>다음 문제</button>
+        </div>
+
+        <div class="hidden" id="problem-title"></div>
+        <div class="hidden" id="problem-desc"></div>
+
+        <div class="input-row">
+          <input id="answer-input" type="text" placeholder="정답을 입력하세요" autocomplete="off" />
+          <button id="submit-btn">제출</button>
+        </div>
+
+        <div id="result-message"></div>
+        <div id="finish-message"></div>
+
+        <button id="reset-btn" class="primary-btn hidden" style="margin-top: 12px;">
+          처음부터 다시 하기
+        </button>
+      </div>
     </div>
-
-    <div id="problem-title"></div>
-    <img id="problem-image" alt="문제 이미지" />
-    <div id="problem-desc"></div>
-
-    <div class="input-row">
-      <input id="answer-input" type="text" placeholder="정답을 입력하세요" autocomplete="off" />
-      <button id="submit-btn">제출</button>
-    </div>
-
-    <div id="result-message"></div>
-    <div id="finish-message"></div>
-
-    <button id="reset-btn" class="primary-btn hidden" style="margin-top: 12px;">
-      처음부터 다시 하기
-    </button>
   </div>
 
   <script src="/js/problemTypes.js" defer></script>

@@ -87,6 +87,8 @@ let nextCooldown = 5;      // 다음 오답 때 적용될 쿨타임
 let cooldownUntil = null;   // 쿨타임 종료 시각 (timestamp ms)
 let cooldownStage = null;   // 쿨타임이 걸려있는 스테이지 번호
 let wrongCooldown = null;   // setInterval 핸들
+let wrongHintText = null;
+let wrongHintStage = null;
 let currentProblemCtxCleanup = null;
 
 // 🔥 쿨타임 상태 저장/복구
@@ -234,7 +236,9 @@ function showFinishedScreen(data) {
 }
 
 // 🔥 쿨타임 시작 (특정 스테이지에 대해서만)
-function startCooldown(seconds, stage) {
+function startCooldown(seconds, stage, hintText) {
+    wrongHintStage = stage;
+    wrongHintText = hintText || null;
     cooldownStage = stage;
     cooldownUntil = Date.now() + seconds * 1000;
     saveCooldownState();
@@ -259,7 +263,12 @@ function startCooldown(seconds, stage) {
                 answerInput.disabled = true;
                 submitBtn.disabled = true;
                 resultEl.style.color = "#f97373";
-                resultEl.textContent = `틀렸습니다! (${remaining}초 후 다시 시도 가능)`;
+
+                const prefix = (wrongHintStage === stage && wrongHintText)
+                    ? `${wrongHintText} `
+                    : "";
+
+                resultEl.textContent = `${prefix}틀렸습니다! (${remaining}초 후 다시 시도 가능)`;
             }
         } else {
             // 쿨타임 종료
@@ -285,6 +294,45 @@ function startCooldown(seconds, stage) {
     wrongCooldown = setInterval(tick, 1000);
 }
 
+function applyStageThemeWithFade(stage) {
+    const willBeLight = Number(stage) >= 8;
+    const isLight = document.body.classList.contains("theme-light");
+
+    // ✅ stage8로 넘어가는 순간(다크 -> 라이트)만 연출
+    const enteringLight = willBeLight && !isLight;
+
+    // 라이트 유지/다크 유지/라이트->다크는 그냥 즉시 전환(연출 없음)
+    if (!enteringLight) {
+        document.body.classList.toggle("theme-light", willBeLight);
+        return;
+    }
+
+    // 1) 오버레이 준비 + "완전 검정" 즉시 덮기
+    document.body.classList.add("theme-fade");
+    document.body.classList.remove("fade-reveal");
+    document.body.classList.add("fade-start");
+
+    // 2) 다음 프레임에 라이트 테마 적용 후, "천천히 밝아지기" 트리거
+    requestAnimationFrame(() => {
+        document.body.classList.toggle("theme-light", true);
+
+        // ✅ 검정 화면 유지 시간(ms) — 여기만 늘리면 됨
+        const holdMs = 400; 
+
+        setTimeout(() => {
+            document.body.classList.remove("fade-start");
+            document.body.classList.add("fade-reveal");
+
+            setTimeout(() => {
+                document.body.classList.remove("fade-reveal");
+            }, 2300); // (밝아지는 시간 + 약간)
+        }, holdMs);
+    });
+}
+
+
+
+
 // 공통 렌더 함수: 문제 데이터를 받아서 화면에 뿌려줌
 function renderProblem(problem, options = {}) {
     const { isCleared = false, currentStageFromServer } = options;
@@ -300,6 +348,8 @@ function renderProblem(problem, options = {}) {
 
     currentStage = problem.stage;
 
+    applyStageThemeWithFade(problem.stage);
+
     // ✅ 도착 순위 텍스트
     const key = String(problem.stage);
     let rank = problem.arrivalRank;
@@ -313,13 +363,14 @@ function renderProblem(problem, options = {}) {
     let arrivalText = "";
     if (typeof rank === "number" && rank > 0) {
         if (rank === 1) {
-            arrivalText = " / 1번째로 도착했어요!";
+            arrivalText = "당신은 1번째로 도착했어요!";
         } else {
-            arrivalText = ` / ${rank}번째로 도착했어요!`;
+            arrivalText = `당신은 ${rank}번째로 도착했어요!`;
         }
     }
 
-    stageInfoEl.textContent = `${problem.stage}번 방입니다.${arrivalText}`;
+    //stageInfoEl.textContent = `${problem.stage}번 방입니다.${arrivalText}`;
+    stageInfoEl.textContent = `${arrivalText}`;
 
     // ✅ 여기서 이미지/타이틀/설명 무조건 세팅
     titleEl.textContent = problem.title || "";
@@ -486,6 +537,8 @@ async function loadProblem(stage) {
             options: data.options || null,
             tapConfig: data.tapConfig || null,
             choiceConfig: data.choiceConfig || null,
+            patternConfig: data.patternConfig || null,
+            mazeConfig: data.mazeConfig || null,
         };
 
         if (typeof stageRanks[key] === "number" && stageRanks[key] > 0) {
@@ -590,13 +643,23 @@ async function submitAnswer(forcedAnswer) {
             return;
         }
 
-        // 3) 오답
         if (!data.correct) {
-            // 이번에 적용할 쿨타임 (기본 10초, 틀릴 때마다 +2초)
-            const cooldownSeconds = nextCooldown;
-            nextCooldown += 1;
+            const isUpdown =
+                data.hint === "UP" || data.hint === "DOWN" || data.hint === "INVALID";
 
-            startCooldown(cooldownSeconds, currentStage);
+            // ✅ 업다운은 쿨타임 20초 고정, 그 외는 기존 로직(점점 증가)
+            const cooldownSeconds = isUpdown ? 20 : nextCooldown;
+
+            if (!isUpdown) {
+                nextCooldown += 1;
+            }
+
+            let hintText = null;
+            if (data.hint === "UP") hintText = "UP";
+            else if (data.hint === "DOWN") hintText = "DOWN";
+            else if (data.hint === "INVALID") hintText = "숫자만 입력!";
+
+            startCooldown(cooldownSeconds, currentStage, hintText);
             return;
         }
 
@@ -648,6 +711,8 @@ async function submitAnswer(forcedAnswer) {
                     options: np.options || null,
                     tapConfig: np.tapConfig || null,
                     choiceConfig: np.choiceConfig || null,
+                    patternConfig: np.patternConfig || null,
+                    mazeConfig: np.mazeConfig || null,
                 };
 
                 const savedRank = stageRanks[key];

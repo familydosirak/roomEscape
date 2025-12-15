@@ -66,6 +66,29 @@
         };
     }
 
+    function setupUpDown(problem, ctx) {
+        cleanupPrev(ctx);
+
+        ctx.inputRow.style.display = "flex";
+        ctx.answerInput.disabled = false;
+        ctx.submitBtn.disabled = false;
+
+        // ✅ 모바일에서 숫자 키패드 유도
+        ctx.answerInput.placeholder = "숫자를 입력하세요";
+        ctx.answerInput.setAttribute("inputmode", "numeric");
+        ctx.answerInput.setAttribute("pattern", "[0-9]*");
+
+        ctx.resultEl.textContent = "";
+
+        ctx._cleanup = function () {
+            // 다음 문제에서 원복(선택)
+            ctx.answerInput.removeAttribute("inputmode");
+            ctx.answerInput.removeAttribute("pattern");
+            ctx.answerInput.placeholder = "정답을 입력하세요";
+        };
+    }
+
+
     /**
      * 화면 TAP 문제
      * - 특정 횟수만큼 화면을 클릭하면 자동으로 정답 제출
@@ -198,13 +221,15 @@
                 }
 
                 if (data.status === "DRAW") {
-                    // 최소 득표가 동률이거나 투표가 거의 없는 경우
-                    ctx.resultEl.style.color = "#f97373";
-                    ctx.resultEl.textContent =
-                        "무승부입니다. 다시 선택해 주세요.";
-                    voted = false;
-                    setButtonsDisabled(false);
+                    ctx.resultEl.style.color = "#4ade80";
+                    ctx.resultEl.textContent = "무승부입니다! 다음 방으로 이동합니다.";
+
                     clearChoiceState();
+
+                    const nextStage = (data.nextStage || data.currentStage || (problem.stage + 1));
+                    if (nextStage && window.escapeShowStage) {
+                        setTimeout(() => window.escapeShowStage(nextStage), 800);
+                    }
                     return;
                 }
 
@@ -318,7 +343,7 @@
             container.appendChild(btn);
         });
 
-        
+
         // 설명 텍스트 바로 아래에 선택 버튼 삽입
         if (ctx.descEl && ctx.descEl.parentNode) {
             ctx.descEl.parentNode.insertBefore(container, ctx.resultEl);
@@ -368,6 +393,218 @@
         };
     }
 
+    function setupPattern(problem, ctx) {
+        cleanupPrev(ctx);
+
+        // 입력창은 숨기고(문자 입력 불필요), 제출은 패턴 UI에서 강제로 submitAnswer 호출
+        ctx.inputRow.style.display = "none";
+        ctx.resultEl.textContent = "";
+
+        const cfg = problem.patternConfig || {};
+        const rows = Number(cfg.rows || 4);
+        const cols = Number(cfg.cols || 4);
+        const total = rows * cols;
+
+        const wrap = document.createElement("div");
+        wrap.className = "pattern-wrap";
+
+        const grid = document.createElement("div");
+        grid.className = "pattern-grid";
+        grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+
+        // 0/1 상태
+        const state = new Array(total).fill(0);
+
+        const cells = [];
+        for (let i = 0; i < total; i++) {
+            const cell = document.createElement("button");
+            cell.type = "button";
+            cell.className = "pattern-cell";
+            cell.setAttribute("aria-label", `cell-${i}`);
+
+            cell.addEventListener("click", () => {
+                if (ctx.submitBtn.disabled || ctx.answerInput.disabled) return; // 쿨타임/잠금 존중
+                state[i] = state[i] ? 0 : 1;
+                cell.classList.toggle("on", state[i] === 1);
+            });
+
+            cells.push(cell);
+            grid.appendChild(cell);
+        }
+
+        const btnRow = document.createElement("div");
+        btnRow.className = "pattern-btn-row";
+
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "pattern-btn";
+        clearBtn.textContent = "전체 지우기";
+
+        clearBtn.addEventListener("click", () => {
+            if (ctx.submitBtn.disabled || ctx.answerInput.disabled) return;
+            for (let i = 0; i < total; i++) {
+                state[i] = 0;
+                cells[i].classList.remove("on");
+            }
+        });
+
+        const submitBtn = document.createElement("button");
+        submitBtn.type = "button";
+        submitBtn.className = "pattern-btn primary";
+        submitBtn.textContent = "제출";
+
+        submitBtn.addEventListener("click", () => {
+            if (ctx.submitBtn.disabled || ctx.answerInput.disabled) return;
+
+            // 16칸(또는 rows*cols칸) 직렬화: "0101..."
+            const encoded = state.join("");
+
+            // 강제 제출
+            if (typeof ctx.submitAnswer === "function") {
+                ctx.submitAnswer(encoded);
+            }
+        });
+
+        btnRow.appendChild(clearBtn);
+        btnRow.appendChild(submitBtn);
+
+        wrap.appendChild(grid);
+        wrap.appendChild(btnRow);
+
+        // desc 아래에 붙이기
+        if (ctx.descEl && ctx.descEl.parentNode) {
+            ctx.descEl.parentNode.insertBefore(wrap, ctx.resultEl);
+        } else {
+            document.getElementById("game-screen").appendChild(wrap);
+        }
+
+        ctx._cleanup = function () {
+            wrap.remove();
+        };
+    }
+
+    function setupMaze(problem, ctx) {
+        cleanupPrev(ctx);
+
+        // 텍스트 입력 제출은 사용 안 함
+        ctx.inputRow.style.display = "none";
+        ctx.resultEl.textContent = "";
+
+        const cfg = problem.mazeConfig || {};
+        const L = cfg.leftSymbol || "<";
+        const R = cfg.rightSymbol || ">";
+
+        let path = "";
+
+        const wrap = document.createElement("div");
+        wrap.className = "maze-wrap";
+
+        const display = document.createElement("div");
+        display.className = "maze-display";
+        display.textContent = "";
+
+        const btnRow = document.createElement("div");
+        btnRow.className = "maze-btn-row";
+
+        const leftBtn = document.createElement("button");
+        leftBtn.type = "button";
+        leftBtn.className = "maze-btn";
+        leftBtn.textContent = "←";
+
+        const rightBtn = document.createElement("button");
+        rightBtn.type = "button";
+        rightBtn.className = "maze-btn";
+        rightBtn.textContent = "→";
+
+        const resetBtn = document.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.className = "maze-btn secondary";
+        resetBtn.textContent = "초기화";
+
+        const submitBtn = document.createElement("button");
+        submitBtn.type = "button";
+        submitBtn.className = "maze-btn primary";
+        submitBtn.textContent = "제출";
+
+        function refresh() {
+            display.textContent = path ? `${path}` : "";
+        }
+
+        function append(symbol) {
+            // 쿨타임/잠금 존중 (너 메인 로직과 동일하게)
+            if (ctx.submitBtn.disabled || ctx.answerInput.disabled) return;
+            path += symbol;
+            refresh();
+            ctx.resultEl.style.color = "#9ca3af";
+            ctx.resultEl.textContent = "입력 중...";
+        }
+
+        function reset() {
+            if (ctx.submitBtn.disabled || ctx.answerInput.disabled) return;
+            path = "";
+            refresh();
+            ctx.resultEl.style.color = "#9ca3af";
+            ctx.resultEl.textContent = "초기화했습니다.";
+        }
+
+        function submit() {
+            if (ctx.submitBtn.disabled || ctx.answerInput.disabled) return;
+
+            const answer = (path || "").trim();
+            if (!answer) {
+                ctx.resultEl.style.color = "#f97373";
+                ctx.resultEl.textContent = "좌/우를 입력한 뒤 제출해주세요.";
+                return;
+            }
+
+            ctx.resultEl.style.color = "#fbbf24";
+            ctx.resultEl.textContent = "정답 확인 중...";
+
+            if (typeof ctx.submitAnswer === "function") {
+                ctx.submitAnswer(answer);
+            }
+        }
+
+        leftBtn.addEventListener("click", () => append(L));
+        rightBtn.addEventListener("click", () => append(R));
+        resetBtn.addEventListener("click", reset);
+        submitBtn.addEventListener("click", submit);
+
+        // (옵션) PC 디버깅 편하게 키보드 지원
+        const onKey = (e) => {
+            if (e.key === "ArrowLeft") { e.preventDefault(); append(L); }
+            if (e.key === "ArrowRight") { e.preventDefault(); append(R); }
+            if (e.key === "Escape") { e.preventDefault(); reset(); }
+            if (e.key === "Enter") { e.preventDefault(); submit(); }
+        };
+        window.addEventListener("keydown", onKey);
+
+        refresh();
+        wrap.appendChild(display);
+        btnRow.appendChild(leftBtn);
+        btnRow.appendChild(rightBtn);
+        btnRow.appendChild(resetBtn);
+        btnRow.appendChild(submitBtn);
+        wrap.appendChild(btnRow);
+
+        // desc 아래에 삽입
+        if (ctx.descEl && ctx.descEl.parentNode) {
+            ctx.descEl.parentNode.insertBefore(wrap, ctx.resultEl);
+        } else {
+            ctx.resultEl.parentNode.insertBefore(wrap, ctx.resultEl);
+        }
+
+        ctx._cleanup = function () {
+            window.removeEventListener("keydown", onKey);
+            wrap.remove();
+            // 다음 문제에서 기본 입력창 다시 쓰도록 복구
+            ctx.inputRow.style.display = "flex";
+        };
+    }
+
+
+
+
 
     /**
      * 외부에서 호출할 진입점
@@ -380,6 +617,12 @@
             setupTap(problem, ctx);
         } else if (type === "CHOICE") {
             setupChoice(problem, ctx);
+        } else if (type === "UPDOWN") {
+            setupUpDown(problem, ctx);
+        } else if (type === "PATTERN") {
+            setupPattern(problem, ctx);
+        } else if (type === "MAZE") {
+            setupMaze(problem, ctx);
         } else {
             setupInput(problem, ctx);
         }
