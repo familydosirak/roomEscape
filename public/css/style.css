@@ -153,6 +153,7 @@ button:disabled {
 }
 
 #result-message {
+    padding-top: 10px;
     min-height: 20px;
     font-size: 13px;
     color: #f97373;
@@ -193,6 +194,13 @@ button:disabled {
 
     #problem-image {
         max-height: 200px;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-user-drag: none;
+        -webkit-touch-callout: none;
+        /* iOS 길게눌러 저장 메뉴 차단 */
+        pointer-events: none;
+        /* ⚠️ 클릭/롱프레스 자체를 못하게(저장 메뉴 거의 사라짐) */
     }
 
     #problem-desc {
@@ -277,6 +285,10 @@ button:disabled {
     border-radius: 0;
     box-shadow: none;
     background: #191919;
+    overflow-y: auto;
+    height: 100dvh;
+    /* 모바일 주소창 대응 */
+    -webkit-overflow-scrolling: touch;
 }
 
 /* 모바일 기본: 이미지/입력칸이 화면 폭에 딱 맞게 */
@@ -541,4 +553,120 @@ body.theme-fade.fade-reveal::before {
 
 .maze-btn.primary {
     font-weight: 700;
+}
+
+/* ✅ 손전등(Flashlight) 오버레이 - safe-area까지 완전 덮기 */
+.flashlight-overlay {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100dvh;
+    /* ✅ 모바일 주소창 변화 대응 */
+
+    /* iOS safe-area까지 덮기 */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+
+    background: #000;
+    opacity: 1;
+    pointer-events: none;
+    z-index: 5000;
+
+    --x: 50vw;
+    --y: 50vh;
+    --r: 90px;
+}
+
+/* 활성화 되었을 때만 구멍(손전등) 뚫기 */
+.flashlight-overlay.active {
+    -webkit-mask-origin: content-box;
+    mask-origin: content-box;
+
+    -webkit-mask-image: radial-gradient(circle var(--r) at var(--x) var(--y),
+            transparent 0%,
+            transparent 55%,
+            rgba(0, 0, 0, 1) 72%,
+            rgba(0, 0, 0, 1) 100%);
+    mask-image: radial-gradient(circle var(--r) at var(--x) var(--y),
+            transparent 0%,
+            transparent 55%,
+            rgba(0, 0, 0, 1) 72%,
+            rgba(0, 0, 0, 1) 100%);
+}
+
+body.scroll-locked {
+    overflow: hidden;
+}
+
+/* ✅ OFF 상태 안내 문구 + 숨쉬기 애니메이션 */
+.flashlight-overlay::after {
+    content: "터치하여 손전등을 켜세요";
+    position: fixed;
+    left: 50%;
+    top: 45%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-align: center;
+    white-space: pre-line;
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+    animation: hintBreath 1800ms ease-in-out infinite;
+}
+
+/* ✅ 손전등 ON이면 문구 완전 제거(애니메이션도 같이 끊기) */
+.flashlight-overlay.active::after {
+    content: "";
+    animation: none !important;
+    opacity: 0 !important;
+}
+
+@keyframes hintBreath {
+    0% {
+        opacity: 0.25;
+        transform: translate(-50%, -50%) scale(0.98);
+    }
+
+    50% {
+        opacity: 0.95;
+        transform: translate(-50%, -50%) scale(1.02);
+    }
+
+    100% {
+        opacity: 0.25;
+        transform: translate(-50%, -50%) scale(0.98);
+    }
+}
+
+
+
+:root {
+    --edge-zone: 80px;
+}
+
+/* 위/아래 감지 구간 */
+
+/* ✅ 손전등 스테이지에서 내부 스크롤이 되도록 */
+#game-screen {
+    height: 100dvh;
+    /* 모바일 주소창 변화 대응 */
+    overflow-y: auto;
+    /* game-screen 안에서 스크롤 */
+    -webkit-overflow-scrolling: touch;
+}
+
+input[type="text"] {
+    font-size: 16px;
+    /* ✅ iOS 자동 줌 방지 */
+}
+
+@media (max-width: 480px) {
+    input[type="text"] {
+        font-size: 16px;
+        /* ✅ 여기 13px으로 내려간 것도 16으로 */
+    }
 }

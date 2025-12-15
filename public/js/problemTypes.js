@@ -602,6 +602,242 @@
         };
     }
 
+    function setupFlashlight(problem, ctx) {
+        cleanupPrev(ctx);
+
+        if (window.visualViewport) {
+            const onVVResize = () => { turnOff(); };
+            window.visualViewport.addEventListener("resize", onVVResize);
+
+            const oldCleanup = ctx._cleanup;
+            ctx._cleanup = function () {
+                window.visualViewport.removeEventListener("resize", onVVResize);
+                oldCleanup && oldCleanup();
+            };
+        }
+
+        // ✅ INPUT은 그대로 사용
+        ctx.inputRow.style.display = "flex";
+        ctx.answerInput.disabled = false;
+        ctx.submitBtn.disabled = false;
+        ctx.answerInput.placeholder = "정답을 입력하세요";
+        ctx.resultEl.textContent = "";
+
+        const gameScreen = document.getElementById("game-screen");
+        if (!gameScreen) return;
+
+        const cfg = problem.flashlightConfig || {};
+        const radius = Number(cfg.radius || 90);
+
+        // 오버레이 생성
+        const overlay = document.createElement("div");
+        overlay.className = "flashlight-overlay";
+        overlay.style.setProperty("--r", `${radius}px`);
+        document.body.appendChild(overlay);
+
+        // =========================
+        // ✅ INPUT / SUBMIT 터치는 손전등에서 제외
+        // =========================
+        const stopFlashlightTouch = (e) => {
+            e.stopPropagation();
+        };
+
+        // 입력창
+        ctx.answerInput.addEventListener("touchstart", stopFlashlightTouch, { passive: true });
+        ctx.answerInput.addEventListener("touchend", stopFlashlightTouch, { passive: true });
+
+        // 제출 버튼
+        ctx.submitBtn.addEventListener("touchstart", stopFlashlightTouch, { passive: true });
+        ctx.submitBtn.addEventListener("touchend", stopFlashlightTouch, { passive: true });
+
+
+        const setPos = (x, y) => {
+            const vv = window.visualViewport;
+            // 키보드/줌으로 viewport가 이동된 경우 보정
+            const ox = vv ? vv.offsetLeft : 0;
+            const oy = vv ? vv.offsetTop : 0;
+
+            overlay.style.setProperty("--x", `${x + ox}px`);
+            overlay.style.setProperty("--y", `${y + oy}px`);
+        };
+
+        let isOn = false;
+
+        // ✅ StarCraft 스타일 엣지 스크롤 (손전등 ON일 때만)
+        const EDGE = 90;      // 위/아래 감지 구간(px)
+        const MAX_SPEED = 22; // 최대 속도(px/frame)
+
+        let rafId = null;
+        let scrollDir = 0; // -1 위, 0 정지, +1 아래
+        let lastClientY = 0;
+
+        // ✅ 스크롤 대상: gameScreen 내부 스크롤
+        const scrollTarget = gameScreen;
+
+        function computeDir(clientY) {
+            const rect = scrollTarget.getBoundingClientRect();
+            const y = clientY - rect.top;
+            const h = rect.height;
+
+            if (y < EDGE) return -1;
+            if (y > h - EDGE) return 1;
+            return 0;
+        }
+
+        function tick() {
+            if (!isOn) {
+                rafId = null;
+                return;
+            }
+
+            // ✅ 손가락이 가만히 있어도 매 프레임 끝 위치인지 다시 계산
+            scrollDir = computeDir(lastClientY);
+
+            if (scrollDir !== 0) {
+                const rect = scrollTarget.getBoundingClientRect();
+                const y = lastClientY - rect.top;
+                const h = rect.height;
+
+                let t = 0;
+                if (scrollDir < 0) t = Math.max(0, (EDGE - y) / EDGE);
+                else t = Math.max(0, (y - (h - EDGE)) / EDGE);
+
+                const speed = Math.max(3, Math.round(MAX_SPEED * t));
+                scrollTarget.scrollTop += scrollDir * speed;
+            }
+
+            rafId = requestAnimationFrame(tick);
+        }
+
+        function updateAutoScroll(clientY) {
+            lastClientY = clientY;
+            scrollDir = computeDir(clientY);
+            if (!rafId) rafId = requestAnimationFrame(tick);
+        }
+
+        function stopAutoScroll() {
+            scrollDir = 0;
+            lastClientY = 0;
+            if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+        }
+
+        const lockScroll = () => {
+            document.body.classList.add("scroll-locked");
+        };
+        const unlockScroll = () => {
+            document.body.classList.remove("scroll-locked");
+        };
+
+        const turnOn = (x, y) => {
+            isOn = true;
+            overlay.classList.add("active");
+            lockScroll();
+            setPos(x, y);
+            updateAutoScroll(y);
+        };
+
+        const turnOff = () => {
+            isOn = false;
+            overlay.classList.remove("active");
+            unlockScroll();
+            stopAutoScroll();
+        };
+
+
+        // =========================
+        // PC: 마우스 이동 시 손전등 이동 + 엣지 스크롤
+        // =========================
+        const onMove = (e) => {
+            if (!isOn) return;
+            setPos(e.clientX, e.clientY);
+            updateAutoScroll(e.clientY);
+        };
+
+        const onMouseDown = (e) => {
+            // PC는 클릭으로 ON/OFF 토글(원하면 제거 가능)
+            if (!isOn) {
+                turnOn(e.clientX, e.clientY);
+            } else {
+                turnOff();
+            }
+        };
+
+        // =========================
+        // Mobile: "누르는 동안만" 손전등 ON + 드래그 이동 + 엣지 스크롤
+        // =========================
+        let isPressing = false;
+
+        // ✅ 누르는 순간 ON (스크롤/바운스 방지하려면 passive:false + preventDefault 필요)
+        const onTouchStart = (e) => {
+            if (!e.touches || !e.touches[0]) return;
+            const t = e.touches[0];
+
+            isPressing = true;
+            e.preventDefault();            // ✅ 손전등 조작 중 페이지 스크롤 방지
+
+            turnOn(t.clientX, t.clientY);
+        };
+
+        const onTouchMove = (e) => {
+            if (!isPressing) return;
+            if (!e.touches || !e.touches[0]) return;
+            const t = e.touches[0];
+
+            e.preventDefault();            // ✅ 드래그 중 스크롤 방지
+            setPos(t.clientX, t.clientY);
+            updateAutoScroll(t.clientY);
+        };
+
+        const onTouchEnd = () => {
+            isPressing = false;
+            turnOff();                     // ✅ 손 떼면 OFF
+        };
+
+        const onTouchCancel = () => {
+            isPressing = false;
+            turnOff();
+        };
+
+        // =========================
+        // 이벤트 등록 (여기 추가)
+        // =========================
+        gameScreen.addEventListener("mousemove", onMove);
+        gameScreen.addEventListener("mousedown", onMouseDown);
+
+        gameScreen.addEventListener("touchstart", onTouchStart, { passive: false });
+        gameScreen.addEventListener("touchmove", onTouchMove, { passive: false });
+        gameScreen.addEventListener("touchend", onTouchEnd, { passive: true });
+        gameScreen.addEventListener("touchcancel", onTouchCancel, { passive: true });
+
+        // =========================
+        // cleanup (여기 추가)
+        // =========================
+        ctx._cleanup = function () {
+            gameScreen.removeEventListener("mousemove", onMove);
+            gameScreen.removeEventListener("mousedown", onMouseDown);
+
+            gameScreen.removeEventListener("touchstart", onTouchStart);
+            gameScreen.removeEventListener("touchmove", onTouchMove);
+            gameScreen.removeEventListener("touchend", onTouchEnd);
+            gameScreen.removeEventListener("touchcancel", onTouchCancel);
+
+            ctx.answerInput.removeEventListener("touchstart", stopFlashlightTouch);
+            ctx.answerInput.removeEventListener("touchend", stopFlashlightTouch);
+            ctx.submitBtn.removeEventListener("touchstart", stopFlashlightTouch);
+            ctx.submitBtn.removeEventListener("touchend", stopFlashlightTouch);
+
+            // 혹시 누른 상태로 나가도 복구
+            document.body.classList.remove("scroll-locked");
+            stopAutoScroll();
+            overlay.remove();
+        };
+
+    }
+
+
 
 
 
@@ -623,6 +859,8 @@
             setupPattern(problem, ctx);
         } else if (type === "MAZE") {
             setupMaze(problem, ctx);
+        } else if (type === "FLASHLIGHT") {
+            setupFlashlight(problem, ctx);
         } else {
             setupInput(problem, ctx);
         }

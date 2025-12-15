@@ -119,11 +119,14 @@ const problems = [
     },
     {
         stage: 10,
-        type: "INPUT",
+        type: "FLASHLIGHT",   // ✅ 변경
         title: "",
         imageUrl: "/img/q10.png",
         description: "",
         answer: "75",
+        flashlightConfig: {
+            radius: 105,         // 손전등 반경(px) - 취향대로 70~140
+        },
     },
     {
         stage: 11,

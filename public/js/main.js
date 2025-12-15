@@ -317,7 +317,7 @@ function applyStageThemeWithFade(stage) {
         document.body.classList.toggle("theme-light", true);
 
         // ✅ 검정 화면 유지 시간(ms) — 여기만 늘리면 됨
-        const holdMs = 400; 
+        const holdMs = 400;
 
         setTimeout(() => {
             document.body.classList.remove("fade-start");
@@ -539,6 +539,7 @@ async function loadProblem(stage) {
             choiceConfig: data.choiceConfig || null,
             patternConfig: data.patternConfig || null,
             mazeConfig: data.mazeConfig || null,
+            flashlightConfig: data.flashlightConfig || null,
         };
 
         if (typeof stageRanks[key] === "number" && stageRanks[key] > 0) {
@@ -713,6 +714,7 @@ async function submitAnswer(forcedAnswer) {
                     choiceConfig: np.choiceConfig || null,
                     patternConfig: np.patternConfig || null,
                     mazeConfig: np.mazeConfig || null,
+                    flashlightConfig: np.flashlightConfig || null,
                 };
 
                 const savedRank = stageRanks[key];
@@ -1126,6 +1128,11 @@ async function initPlayerMode() {
         // 에러 났을 때는 그냥 기존 로직 유지 (참가자 화면 보여줌)
     }
 }
+
+document.addEventListener("contextmenu", (e) => {
+  const img = e.target && e.target.id === "problem-image";
+  if (img) e.preventDefault();
+}, { capture: true });
 
 updateScreenVisibility();
 initPlayerMode();

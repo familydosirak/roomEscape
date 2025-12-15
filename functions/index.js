@@ -229,7 +229,9 @@ exports.problem = onRequest(
             if (problem.mazeConfig) {
                 payload.mazeConfig = problem.mazeConfig;
             }
-
+            if (problem.flashlightConfig) {
+                payload.flashlightConfig = problem.flashlightConfig;
+            }
             payload.arrivalRank = await getStageClearCount(stage);
 
             if (isCleared) {
@@ -444,6 +446,9 @@ exports.answer = onRequest(
             }
             if (nextProblem && nextProblem.mazeConfig) {
                 nextProblemPayload.mazeConfig = nextProblem.mazeConfig;
+            }
+            if (nextProblem && nextProblem.flashlightConfig) {
+                nextProblemPayload.flashlightConfig = nextProblem.flashlightConfig;
             }
 
             return res.json({
