@@ -670,3 +670,26 @@ input[type="text"] {
         /* ✅ 여기 13px으로 내려간 것도 16으로 */
     }
 }
+
+/* 🔥 DUEL 패배 버튼 */
+.duel-lose-btn {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: #dc2626;
+    /* 빨간색 */
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    border: none;
+    cursor: pointer;
+}
+
+.duel-lose-btn:hover:not(:disabled) {
+    background: #ef4444;
+}
+
+.duel-lose-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}

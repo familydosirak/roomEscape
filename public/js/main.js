@@ -90,6 +90,7 @@ let wrongCooldown = null;   // setInterval 핸들
 let wrongHintText = null;
 let wrongHintStage = null;
 let currentProblemCtxCleanup = null;
+let currentProblemType = "INPUT";
 
 // 🔥 쿨타임 상태 저장/복구
 function saveCooldownState() {
@@ -229,8 +230,8 @@ function showFinishedScreen(data) {
     answerInput.disabled = true;
     submitBtn.disabled = true;
 
-    resetBtn.classList.remove("hidden");
-    resetBtn.disabled = false;
+    //resetBtn.classList.remove("hidden");
+    //resetBtn.disabled = false;
 
     updateNavButtons();
 }
@@ -347,6 +348,7 @@ function renderProblem(problem, options = {}) {
     finishEl.textContent = "";
 
     currentStage = problem.stage;
+    currentProblemType = (problem.type || "INPUT").toUpperCase();
 
     applyStageThemeWithFade(problem.stage);
 
@@ -540,6 +542,7 @@ async function loadProblem(stage) {
             patternConfig: data.patternConfig || null,
             mazeConfig: data.mazeConfig || null,
             flashlightConfig: data.flashlightConfig || null,
+            duel: data.duel || null,
         };
 
         if (typeof stageRanks[key] === "number" && stageRanks[key] > 0) {
@@ -617,10 +620,15 @@ async function submitAnswer(forcedAnswer) {
         resultEl.style.color = "#fbbf24";
         resultEl.textContent = "정답 확인 중...";
 
-        const res = await fetch("/api/answer", {
+        const url = (currentProblemType === "DUEL") ? "/api/duelSubmit" : "/api/answer";
+        const body = (currentProblemType === "DUEL")
+            ? { sessionId, code: answer }              // ✅ DUEL
+            : { sessionId, stage: currentStage, answer }; // ✅ 기존
+
+        const res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sessionId, stage: currentStage, answer }),
+            body: JSON.stringify(body),
         });
         const data = await res.json();
 
@@ -1130,8 +1138,8 @@ async function initPlayerMode() {
 }
 
 document.addEventListener("contextmenu", (e) => {
-  const img = e.target && e.target.id === "problem-image";
-  if (img) e.preventDefault();
+    const img = e.target && e.target.id === "problem-image";
+    if (img) e.preventDefault();
 }, { capture: true });
 
 updateScreenVisibility();

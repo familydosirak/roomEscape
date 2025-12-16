@@ -18,6 +18,8 @@ const stageStatsRef = db.collection("stageStats");
 const stageClearsRef = db.collection("stageClears");
 const choiceRoundsRef = db.collection("choiceRounds");
 const playersRef = db.collection("players");
+const duelCodesRef = db.collection("duelCodes");
+
 
 const nicknameRegex = /^[가-힣a-zA-Z0-9_ ]+$/; // 닉네임 정규식: 한글, 영어, 숫자, 언더바, 공백 허용
 
@@ -88,6 +90,13 @@ async function getCurrentStage(sessionId, nickname) {
     return data.currentStage || 1;
 }
 
+
+async function getSessionData(sessionId) {
+    if (!sessionId) return null;
+    const snap = await sessionsRef.doc(sessionId).get();
+    return snap.exists ? (snap.data() || {}) : null;
+}
+
 /**
  * 세션의 현재 스테이지를 갱신한다.
  * @param {string} sessionId
@@ -152,6 +161,31 @@ exports.problem = onRequest(
 
             const currentStage = await getCurrentStage(sessionId, nickname); // ✅ 닉네임 전달
 
+            const sess = await getSessionData(sessionId);
+
+            const eliminated = !!(sess && sess.eliminated === true);
+            const eliminatedStage = Number((sess && sess.eliminatedStage) || 0);
+
+            if (eliminated && eliminatedStage === 11) {
+                if (rawStage <= 0) {
+                    return res.json({
+                        ok: true,
+                        finished: false,
+                        currentStage: 11,
+                        eliminated: true,
+                        eliminatedStage: 11,
+                    });
+                }
+                if (rawStage > 11) {
+                    return res.status(403).json({
+                        ok: false,
+                        message: "탈락하여 더 이상 진행할 수 없습니다.",
+                        currentStage: 11,
+                    });
+                }
+            }
+
+
             // stage=0 이면 "상태만 조회" (문제 내용 X)
             if (rawStage <= 0) {
                 const currentProblem = findProblem(currentStage);
@@ -211,6 +245,15 @@ exports.problem = onRequest(
                 finished: false,
                 currentStage,
                 isCleared,
+
+            };
+
+            payload.duel = {
+                eliminated: eliminated && eliminatedStage === 11,
+                code:
+                    eliminated && eliminatedStage === 11
+                        ? (sess.eliminatedCode || null)
+                        : null,
             };
 
             // 선택/탭/분기 설정도 그대로 내려주기
@@ -525,6 +568,235 @@ exports.reset = onRequest(
         }
     },
 );
+
+exports.duelLose = onRequest(
+    { region: "asia-northeast1" },
+    async (req, res) => {
+        if (req.method !== "POST") {
+            return res.status(405).json({ ok: false, message: "POST만 가능합니다." });
+        }
+
+        try {
+            const { sessionId } = req.body || {};
+            if (!sessionId) {
+                return res.status(400).json({ ok: false, message: "sessionId가 필요합니다." });
+            }
+
+            const allowed = await ensureSessionAllowed(sessionId);
+            if (!allowed) {
+                return res.status(403).json({
+                    ok: false,
+                    code: "PLAYER_REG_REQUIRED",
+                    message: "참가자 등록을 먼저 진행해주세요.",
+                });
+            }
+
+            const currentStage = await getCurrentStage(sessionId);
+            if (currentStage !== 11) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "스테이지 11에서만 패배를 선택할 수 있습니다.",
+                    currentStage,
+                });
+            }
+
+            // 이미 탈락 처리된 세션이면 그대로 반환
+            const sess = await getSessionData(sessionId);
+            if (sess && sess.eliminated === true && Number(sess.eliminatedStage) === 11) {
+                return res.json({
+                    ok: true,
+                    eliminated: true,
+                    code: sess.eliminatedCode || null,
+                    currentStage: 11,
+                });
+            }
+
+            // ✅ 8자리 코드 생성 + docId로 사용(중복 방지)
+            const makeCode = () => String(Math.floor(Math.random() * 100000000)).padStart(8, "0");
+
+            let issuedCode = null;
+
+            // 충돌 가능성 낮지만 안전하게 최대 몇 번 시도
+            for (let i = 0; i < 12; i++) {
+                const code = makeCode();
+                const ref = duelCodesRef.doc(code);
+                const snap = await ref.get();
+                if (!snap.exists) {
+                    issuedCode = code;
+                    await ref.set({
+                        code,
+                        createdBy: sessionId,
+                        stage: 11,
+                        used: false,
+                        createdAt: FieldValue.serverTimestamp(),
+                    });
+                    break;
+                }
+            }
+
+            if (!issuedCode) {
+                return res.status(500).json({
+                    ok: false,
+                    message: "코드 생성에 실패했습니다. 다시 시도해주세요.",
+                });
+            }
+
+            // ✅ 세션 탈락 고정
+            await sessionsRef.doc(sessionId).set(
+                {
+                    eliminated: true,
+                    eliminatedStage: 11,
+                    eliminatedAt: FieldValue.serverTimestamp(),
+                    eliminatedCode: issuedCode,
+                    currentStage: 11, // 고정
+                },
+                { merge: true }
+            );
+
+            return res.json({
+                ok: true,
+                eliminated: true,
+                code: issuedCode,
+                currentStage: 11,
+            });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ ok: false, message: "서버 오류가 발생했습니다." });
+        }
+    }
+);
+
+exports.duelSubmit = onRequest(
+    { region: "asia-northeast1" },
+    async (req, res) => {
+        if (req.method !== "POST") {
+            return res.status(405).json({ ok: false, message: "POST만 가능합니다." });
+        }
+
+        try {
+            const { sessionId, code } = req.body || {};
+            const input = (code || "").toString().trim();
+
+            if (!sessionId || !input) {
+                return res.status(400).json({ ok: false, message: "sessionId, code가 필요합니다." });
+            }
+
+            const allowed = await ensureSessionAllowed(sessionId);
+            if (!allowed) {
+                return res.status(403).json({
+                    ok: false,
+                    code: "PLAYER_REG_REQUIRED",
+                    message: "참가자 등록을 먼저 진행해주세요.",
+                });
+            }
+
+            const currentStage = await getCurrentStage(sessionId);
+            if (currentStage !== 11) {
+                return res.status(400).json({
+                    ok: false,
+                    message: "스테이지 11에서만 코드를 제출할 수 있습니다.",
+                    currentStage,
+                });
+            }
+
+            // 탈락자는 제출 불가
+            const sess = await getSessionData(sessionId);
+            if (sess && sess.eliminated === true && Number(sess.eliminatedStage) === 11) {
+                return res.status(403).json({
+                    ok: false,
+                    message: "탈락하여 더 이상 진행할 수 없습니다.",
+                    currentStage: 11,
+                });
+            }
+
+            // 형식 검사: 8자리 숫자
+            if (!/^\d{8}$/.test(input)) {
+                return res.json({
+                    ok: true,
+                    correct: false,
+                    message: "8자리 숫자 코드를 입력해주세요.",
+                    currentStage: 11,
+                });
+            }
+
+            // ✅ 트랜잭션으로 “존재 + 미사용”일 때만 used 처리
+            const codeRef = duelCodesRef.doc(input);
+
+            const ok = await db.runTransaction(async (t) => {
+                const snap = await t.get(codeRef);
+                if (!snap.exists) return { ok: false, reason: "NOT_FOUND" };
+
+                const data = snap.data() || {};
+                if (data.used) return { ok: false, reason: "USED" };
+
+                t.set(codeRef, {
+                    used: true,
+                    usedBy: sessionId,
+                    usedAt: FieldValue.serverTimestamp(),
+                }, { merge: true });
+
+                return { ok: true };
+            });
+
+            if (!ok.ok) {
+                const msg =
+                    ok.reason === "USED"
+                        ? "이미 사용된 코드입니다."
+                        : "존재하지 않는 코드입니다.";
+                return res.json({
+                    ok: true,
+                    correct: false,
+                    message: msg,
+                    currentStage: 11,
+                });
+            }
+
+            // ✅ 통과 → 스테이지 12로 진행 (기존 answer 로직 형태 유지)
+            const nextStageNum = 12;
+            await updateStage(sessionId, nextStageNum);
+
+            const nextProblem = findProblem(nextStageNum);
+            if (!nextProblem) {
+                return res.json({
+                    ok: true,
+                    correct: true,
+                    finished: true,
+                    hasNext: false,
+                    currentStage: nextStageNum,
+                    message: "모든 문제를 클리어했습니다!",
+                    clearImageUrl: "/img/clear.png",
+                });
+            }
+
+            return res.json({
+                ok: true,
+                correct: true,
+                finished: false,
+                hasNext: true,
+                currentStage: nextStageNum,
+                nextStage: nextStageNum,
+                nextProblem: {
+                    stage: nextProblem.stage,
+                    type: nextProblem.type || "INPUT",
+                    title: nextProblem.title,
+                    imageUrl: nextProblem.imageUrl,
+                    description: nextProblem.description,
+                    options: nextProblem.options || null,
+                    tapConfig: nextProblem.tapConfig || null,
+                    choiceConfig: nextProblem.choiceConfig || null,
+                    patternConfig: nextProblem.patternConfig || null,
+                    mazeConfig: nextProblem.mazeConfig || null,
+                    flashlightConfig: nextProblem.flashlightConfig || null,
+                },
+            });
+        } catch (e) {
+            console.error(e);
+            return res.status(500).json({ ok: false, message: "서버 오류가 발생했습니다." });
+        }
+    }
+);
+
+
 /**
  * 관리자용 스테이지 통계 조회 API
  * GET /api/admin/stats

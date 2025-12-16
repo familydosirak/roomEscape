@@ -837,6 +837,108 @@
 
     }
 
+    function setupDuel(problem, ctx) {
+        cleanupPrev(ctx);
+
+        ctx.inputRow.style.display = "flex";
+        ctx.answerInput.disabled = false;
+        ctx.submitBtn.disabled = false;
+
+        ctx.answerInput.placeholder = "8자리 코드를 입력하세요";
+        ctx.answerInput.setAttribute("inputmode", "numeric");
+        ctx.answerInput.setAttribute("pattern", "[0-9]*");
+        ctx.answerInput.setAttribute("maxlength", "8");
+
+        ctx.resultEl.textContent = "";
+
+        const duel = problem.duel || {};
+        const isEliminated = !!duel.eliminated;
+
+        // ✅ 패배 버튼 UI
+        const loseBtn = document.createElement("button");
+        loseBtn.type = "button";
+        loseBtn.className = "secondary-btn";
+        loseBtn.textContent = "패배";
+        loseBtn.className = "duel-lose-btn";
+        
+        // input-row 아래에 붙이기
+        ctx.inputRow.parentNode.insertBefore(loseBtn, ctx.resultEl);
+
+        // ✅ 이미 탈락 상태면: 입력/제출 막고 코드만 보여주기
+        const showEliminated = (code) => {
+            ctx.inputRow.style.display = "none";
+            ctx.answerInput.disabled = true;
+            ctx.submitBtn.disabled = true;
+            loseBtn.disabled = true;
+
+            ctx.resultEl.style.color = "#f97373";
+            ctx.resultEl.textContent = "탈락했습니다. 더 이상 진행할 수 없습니다.";
+
+            if (code) {
+                const codeBox = document.createElement("div");
+                codeBox.className = "nickname-message";
+                codeBox.style.fontSize = "16px";
+                codeBox.style.textAlign = "center";
+                codeBox.style.marginTop = "10px";
+                codeBox.textContent = `당신의 코드: ${code}`;
+                ctx.resultEl.parentNode.insertBefore(codeBox, ctx.finishEl || null);
+
+                // cleanup에서 제거되도록 저장
+                ctx._duelCodeBox = codeBox;
+            }
+        };
+
+        if (isEliminated) {
+            showEliminated(duel.code);
+        }
+
+        // ✅ 패배 버튼 동작
+        loseBtn.addEventListener("click", async () => {
+            if (isEliminated) return;
+
+            const ok = confirm("패배를 선택하면 더 이상 진행할 수 없습니다. 정말 패배할까요?");
+            if (!ok) return;
+
+            loseBtn.disabled = true;
+            ctx.resultEl.style.color = "#fbbf24";
+            ctx.resultEl.textContent = "처리 중...";
+
+            try {
+                const res = await fetch("/api/duelLose", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sessionId: window.escapeSessionId }),
+                });
+
+                const data = await res.json();
+
+                if (!data.ok) {
+                    loseBtn.disabled = false;
+                    ctx.resultEl.style.color = "#f97373";
+                    ctx.resultEl.textContent = data.message || "처리 중 오류가 발생했습니다.";
+                    return;
+                }
+
+                showEliminated(data.code);
+            } catch (e) {
+                console.error(e);
+                loseBtn.disabled = false;
+                ctx.resultEl.style.color = "#f97373";
+                ctx.resultEl.textContent = "처리 중 오류가 발생했습니다.";
+            }
+        });
+
+        ctx._cleanup = function () {
+            ctx.answerInput.removeAttribute("inputmode");
+            ctx.answerInput.removeAttribute("pattern");
+            ctx.answerInput.removeAttribute("maxlength");
+            ctx.answerInput.placeholder = "정답을 입력하세요";
+
+            loseBtn.remove();
+            if (ctx._duelCodeBox) ctx._duelCodeBox.remove();
+        };
+    }
+
 
 
 
@@ -861,6 +963,8 @@
             setupMaze(problem, ctx);
         } else if (type === "FLASHLIGHT") {
             setupFlashlight(problem, ctx);
+        } else if (type === "DUEL") {
+            setupDuel(problem, ctx);
         } else {
             setupInput(problem, ctx);
         }

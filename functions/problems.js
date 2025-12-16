@@ -88,7 +88,7 @@ const problems = [
         title: "",
         imageUrl: "/img/q7.png",
         description: "",
-        // TAP형도 결국 서버에는 문자열로 정답을 저장해둠 (유저는 이 값은 몰라)
+        // TAP형도 결국 서버에는 문자열로 정답을 저장해둠
         answer: "TAP_10",
         tapConfig: {
             requiredTaps: 10,     // 필요한 터치 횟수
@@ -119,7 +119,7 @@ const problems = [
     },
     {
         stage: 10,
-        type: "FLASHLIGHT",   // ✅ 변경
+        type: "FLASHLIGHT",  
         title: "",
         imageUrl: "/img/q10.png",
         description: "",
@@ -130,11 +130,11 @@ const problems = [
     },
     {
         stage: 11,
-        type: "INPUT",
+        type: "DUEL",         
         title: "",
         imageUrl: "/img/q11.png",
         description: "",
-        answer: "light",
+        answer: "",          
     },
     {
         stage: 12,

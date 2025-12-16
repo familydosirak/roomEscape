@@ -94,6 +94,20 @@
         }
       },
       {
+        "source": "/api/duelLose",
+        "function": {
+          "functionId": "duelLose",
+          "region": "asia-northeast1"
+        }
+      },
+      {
+        "source": "/api/duelSubmit",
+        "function": {
+          "functionId": "duelSubmit",
+          "region": "asia-northeast1"
+        }
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
