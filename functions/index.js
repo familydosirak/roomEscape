@@ -196,7 +196,8 @@ exports.problem = onRequest(
                         finished: true,
                         currentStage,
                         message: "모든 문제를 클리어했습니다!",
-                        clearImageUrl: "/img/clear.png",
+                        //clearImageUrl: "/img/clear.png",
+                        clearImageUrl: "",
                     });
                 }
 
@@ -228,7 +229,8 @@ exports.problem = onRequest(
                     finished: true,
                     message: "모든 문제를 클리어했습니다!",
                     currentStage,
-                    clearImageUrl: "/img/clear.png",
+                    //clearImageUrl: "/img/clear.png",
+                    clearImageUrl: "",
                 });
             }
 
@@ -464,7 +466,8 @@ exports.answer = onRequest(
                     hasNext: false,
                     currentStage: newStage,
                     message: "모든 문제를 클리어했습니다!",
-                    clearImageUrl: "/img/clear.png",
+                    //clearImageUrl: "/img/clear.png",
+                    clearImageUrl: "",
                     arrivalRank, // 마지막 방까지 클리어했을 때 도착 순위
                 });
             }
@@ -764,7 +767,8 @@ exports.duelSubmit = onRequest(
                     hasNext: false,
                     currentStage: nextStageNum,
                     message: "모든 문제를 클리어했습니다!",
-                    clearImageUrl: "/img/clear.png",
+                    //clearImageUrl: "/img/clear.png",
+                    clearImageUrl: "",
                 });
             }
 

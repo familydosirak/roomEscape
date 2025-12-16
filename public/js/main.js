@@ -12,6 +12,7 @@ if (!sessionId) {
 
 window.escapeSessionId = sessionId;
 
+
 // ✅ 스테이지별 "내 도착 순위" & 문제 캐시
 let stageRanks = {};
 let stageCache = {};
@@ -212,15 +213,16 @@ function showFinishedScreen(data) {
     saveFinishedState({
         currentStage: typeof data.currentStage === "number" ? data.currentStage : maxUnlockedStage,
         message: data.message || "모든 문제를 클리어했습니다!",
-        clearImageUrl: data.clearImageUrl || "/img/clear.png",
+        //clearImageUrl: data.clearImageUrl || "/img/clear.png",
+        clearImageUrl: data.clearImageUrl || "",
     });
 
     stageInfoEl.textContent = "";
     titleEl.textContent = "게임 클리어!";
 
     imgEl.style.display = "block";
-    imgEl.src = data.clearImageUrl || "/img/clear.png";
-
+    //imgEl.src = data.clearImageUrl || "/img/clear.png";
+    imgEl.src = data.clearImageUrl || "";
     descEl.textContent = "";
     resultEl.textContent = "";
     finishEl.textContent =
@@ -502,6 +504,7 @@ async function loadProblem(stage) {
             // 🔥 참가자 등록이 필요하다고 서버가 알려준 경우
             if (data.code === "PLAYER_REG_REQUIRED") {
                 clearPlayerRegistration();  // localStorage 비우고
+                saveFinishedState(null);    // 클리어 정보도 초기화
                 updateScreenVisibility();   // player-screen 다시 보이게
 
                 // 게임 화면 보고 있었으면 메인으로 돌려보내고 안내
@@ -772,19 +775,6 @@ async function startGame() {
         // ✅ 여기서는 입력창에 뭐가 적혀있든, "확정된 nickname 변수"만 사용
         //    (닉네임 다시 바꾸고 싶으면 반드시 '닉네임 설정' 버튼을 눌러야 함)
 
-        // 이미 클리어 상태 저장돼 있으면 그대로 클리어 화면
-        if (finishedState) {
-            mainScreen.classList.add("hidden");
-            gameScreen.classList.remove("hidden");
-
-            showFinishedScreen({
-                currentStage: finishedState.currentStage,
-                message: finishedState.message,
-                clearImageUrl: finishedState.clearImageUrl,
-            });
-            return;
-        }
-
         // 🔥 닉네임은 changeNickname API에서 이미 서버에 반영된 상태라고 가정
         // 굳이 여기서 다시 닉네임을 보낼 필요 없음
         const res = await fetch(
@@ -798,6 +788,7 @@ async function startGame() {
             // 🔥 참가자 등록이 필요하다고 서버가 알려주는 경우
             if (data.code === "PLAYER_REG_REQUIRED") {
                 clearPlayerRegistration();      // localStorage 비우고
+                saveFinishedState(null);    // 클리어 정보도 초기화
                 updateScreenVisibility();       // player-screen 다시 보이게
                 alert("참가자 등록 정보가 없어 다시 입력이 필요합니다.\n참가자 이름/코드를 다시 입력해주세요.");
             } else {
@@ -821,6 +812,10 @@ async function startGame() {
         } else {
             const stageToStart = data.currentStage || 1;
             await loadProblem(stageToStart);
+        }
+
+        if (finishedState) {
+            saveFinishedState(null);
         }
     } catch (e) {
         console.error(e);

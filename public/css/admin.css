@@ -19,6 +19,7 @@ h1 {
 }
 
 .top-row {
+    padding-top : 20px;
     display: flex;
     gap: 12px;
     align-items: center;
@@ -470,4 +471,18 @@ td:nth-child(3) .tag-list {
 
 .hidden {
     display: none;
+}
+
+
+.title-sub {
+    font-size: 28px;
+    margin: 0;
+    letter-spacing: -0.01em;
+    color: #e5e7eb;
+}
+
+.title-sub .red {
+    color: #ef4444;
+    font-weight: 800;
+    text-shadow: 0 0 6px rgba(239, 68, 68, 0.45);
 }

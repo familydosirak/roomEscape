@@ -125,7 +125,7 @@ const problems = [
         description: "",
         answer: "75",
         flashlightConfig: {
-            radius: 105,         // 손전등 반경(px) - 취향대로 70~140
+            radius: 75,         // 손전등 반경(px) - 취향대로 70~140
         },
     },
     {

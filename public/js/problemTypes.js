@@ -527,7 +527,17 @@
         submitBtn.textContent = "제출";
 
         function refresh() {
-            display.textContent = path ? `${path}` : "";
+            if (!path) {
+                display.textContent = "";
+                return;
+            }
+
+            // 화면 표시용 변환 (< > → 화살표)
+            const visual = path
+                .replaceAll("<", "←")
+                .replaceAll(">", "→");
+
+            display.textContent = visual;
         }
 
         function append(symbol) {
@@ -616,7 +626,6 @@
             };
         }
 
-        // ✅ INPUT은 그대로 사용
         ctx.inputRow.style.display = "flex";
         ctx.answerInput.disabled = false;
         ctx.submitBtn.disabled = false;
@@ -651,15 +660,22 @@
         ctx.submitBtn.addEventListener("touchend", stopFlashlightTouch, { passive: true });
 
 
+        const OFFSET_X = -50; // 왼쪽으로 40px
+        const OFFSET_Y = -65; // 위로 55px
+
         const setPos = (x, y) => {
             const vv = window.visualViewport;
-            // 키보드/줌으로 viewport가 이동된 경우 보정
             const ox = vv ? vv.offsetLeft : 0;
             const oy = vv ? vv.offsetTop : 0;
 
-            overlay.style.setProperty("--x", `${x + ox}px`);
-            overlay.style.setProperty("--y", `${y + oy}px`);
+            // ✅ 손가락 기준 대각선 왼쪽 위로 이동
+            const nx = x + OFFSET_X;
+            const ny = y + OFFSET_Y;
+
+            overlay.style.setProperty("--x", `${nx + ox}px`);
+            overlay.style.setProperty("--y", `${ny + oy}px`);
         };
+
 
         let isOn = false;
 
@@ -860,7 +876,7 @@
         loseBtn.className = "secondary-btn";
         loseBtn.textContent = "패배";
         loseBtn.className = "duel-lose-btn";
-        
+
         // input-row 아래에 붙이기
         ctx.inputRow.parentNode.insertBefore(loseBtn, ctx.resultEl);
 
@@ -949,6 +965,14 @@
      * - problem.type에 따라 적절한 세팅을 호출
      */
     ProblemTypes.apply = function (problem, ctx) {
+        // ✅ 새 문제 열릴 때마다 game-screen 스크롤을 맨 위로
+        const gameScreen = document.getElementById("game-screen");
+        if (gameScreen) {
+            gameScreen.scrollTop = 0; // 내부 스크롤 초기화
+        }
+        // (혹시 window 자체가 스크롤되는 레이아웃이면 이것도 같이)
+        window.scrollTo(0, 0);
+
         const type = (problem.type || "INPUT").toUpperCase();
 
         if (type === "TAP") {

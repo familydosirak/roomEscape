@@ -31,11 +31,40 @@ h1 {
 }
 
 .subtitle {
-    text-align: center;
-    font-size: 14px;
-    color: #ccc;
-    margin-bottom: 24px;
+    margin-top: 12px;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #d1d5db;
+    /* 기본 회백색 */
 }
+
+/* 예시 텍스트 */
+.subtitle .example {
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+/* 일반 안내 */
+.subtitle .info {
+    display: block;
+    margin-left: 4px;
+}
+
+/* 경고 문구 */
+.subtitle .warn {
+    display: block;
+    margin-top: 8px;
+    color: #f87171;
+    /* 부드러운 레드 */
+    font-weight: 600;
+}
+
+/* 강조 */
+.subtitle strong {
+    color: #ffffff;
+    font-weight: 700;
+}
+
 
 .primary-btn {
     display: block;
@@ -227,6 +256,8 @@ button:disabled {
 }
 
 .secondary-btn {
+    height: 40px;
+    width: 100px;
     padding: 6px 12px;
     border-radius: 6px;
     border: 1px solid #4b5563;
@@ -540,15 +571,22 @@ body.theme-fade.fade-reveal::before {
 }
 
 .maze-display {
-    height: 40px;
-    font-size: 12px;
-    color: #000000;
+    height: auto;
+    min-height: 40px;
+
+    font-size: 14px;
+    line-height: 1.6;
+
     text-align: center;
     padding: 10px 12px;
+
     border: 1px solid #333;
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);
-    word-break: break-all;
+
+    word-break: normal;
+    overflow-wrap: anywhere;
+    white-space: normal;
 }
 
 .maze-btn.primary {
@@ -692,4 +730,9 @@ input[type="text"] {
 .duel-lose-btn:disabled {
     opacity: 0.5;
     cursor: default;
+}
+
+html,
+body {
+    touch-action: manipulation;
 }
