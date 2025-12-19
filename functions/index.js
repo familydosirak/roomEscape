@@ -196,8 +196,7 @@ exports.problem = onRequest(
                         finished: true,
                         currentStage,
                         message: "모든 문제를 클리어했습니다!",
-                        //clearImageUrl: "/img/clear.png",
-                        clearImageUrl: "",
+                        clearImageUrl: "/img/clear.png",
                     });
                 }
 
@@ -229,8 +228,7 @@ exports.problem = onRequest(
                     finished: true,
                     message: "모든 문제를 클리어했습니다!",
                     currentStage,
-                    //clearImageUrl: "/img/clear.png",
-                    clearImageUrl: "",
+                    clearImageUrl: "/img/clear.png",
                 });
             }
 
@@ -410,7 +408,7 @@ exports.answer = onRequest(
             let arrivalRank = 1;
             try {
                 await db.runTransaction(async (t) => {
-                    const docRef = stageStatsRef.doc(String(stageNum)); // ✅ 현재 스테이지 기준
+                    const docRef = stageStatsRef.doc(String(newStage));  // ✅ 현재 스테이지 기준
                     const snap = await t.get(docRef);
 
                     let clearCount = 0;
@@ -424,7 +422,7 @@ exports.answer = onRequest(
                     t.set(
                         docRef,
                         {
-                            stage: stageNum,
+                            stage: newStage,
                             clearCount: newCount,
                             updatedAt: FieldValue.serverTimestamp(),
                         },
@@ -466,8 +464,7 @@ exports.answer = onRequest(
                     hasNext: false,
                     currentStage: newStage,
                     message: "모든 문제를 클리어했습니다!",
-                    //clearImageUrl: "/img/clear.png",
-                    clearImageUrl: "",
+                    clearImageUrl: "/img/clear.png",
                     arrivalRank, // 마지막 방까지 클리어했을 때 도착 순위
                 });
             }
@@ -767,8 +764,7 @@ exports.duelSubmit = onRequest(
                     hasNext: false,
                     currentStage: nextStageNum,
                     message: "모든 문제를 클리어했습니다!",
-                    //clearImageUrl: "/img/clear.png",
-                    clearImageUrl: "",
+                    clearImageUrl: "/img/clear.png",
                 });
             }
 

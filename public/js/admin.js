@@ -30,7 +30,7 @@ let prevRacePositions = {};
 let raceHorseMap = {}; // 기존 말 DOM 재사용
 
 let adminPassword = "";
-const AUTO_REFRESH_MS = 20000;
+const AUTO_REFRESH_MS = 15000;
 let autoTimer = null;
 let isLoading = false;
 
@@ -39,6 +39,21 @@ let isLoading = false;
 ========================================================= */
 
 let tooltipEl = null;
+
+function formatStageLabel(stage) {
+    const n = Number(stage);
+
+    if (!Number.isFinite(n)) {
+        const s = String(stage || "").trim();
+        return s ? `${s}번` : "-";
+    }
+
+    // ✅ 서버 stage가 1~12로 오는 기준 매핑
+    if (n === 7) return "5-1번";     // 7 -> 5-1
+    if (n >= 8) return `${n - 2}번`; // 8->6, 9->7, ... 12->10
+    return `${n - 1}번`;            // 1->0, 2->1, ... 6->5
+}
+
 
 function ensureTooltipEl() {
     if (tooltipEl) return tooltipEl;
@@ -86,7 +101,8 @@ function renderStats(stages) {
         const tr = document.createElement("tr");
 
         const tdStage = document.createElement("td");
-        tdStage.textContent = `${s.stage}번`;
+        tdStage.textContent = formatStageLabel(s.stage);
+
         tr.appendChild(tdStage);
 
         const tdCleared = document.createElement("td");
@@ -161,7 +177,7 @@ function renderClearList(stages) {
 
         const title = document.createElement("div");
         title.className = "clear-stage-title";
-        title.textContent = `${s.stage}번 방${isFinal ? " (최종 클리어)" : ""}`;
+        title.textContent = `${formatStageLabel(s.stage)} 방${isFinal ? " (최종 클리어)" : ""}`;
 
         const wrap = document.createElement("div");
         wrap.className = "tag-list clear-tag-list";
@@ -307,7 +323,7 @@ function renderRaceGlobal(stages) {
 
         horseEl.querySelector(".race-name").textContent = runner.name;
         horseEl.querySelector(".race-stage-label").textContent =
-            `(${runner.stage}번 방 ${runner.stageRank}위)`;
+            `(${formatStageLabel(runner.stage)} 방 ${runner.stageRank}위)`;
 
         const oldPos = prevRacePositions[runner.name];
 

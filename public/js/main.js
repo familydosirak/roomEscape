@@ -185,6 +185,11 @@ function clearPlayerRegistration() {
         localStorage.removeItem("escapePlayerRegistered");
         localStorage.removeItem("escapePlayerCode");
         localStorage.removeItem("escapePlayerName");
+
+        localStorage.removeItem("escapeFinishedInfo");
+        localStorage.removeItem("escapeStageRanks");
+        localStorage.removeItem("escapeStageProblems");
+        localStorage.removeItem("escapeCooldown");
     } catch (e) {
         console.warn("failed to clear player registration", e);
     }
@@ -204,6 +209,15 @@ function updateNavButtons() {
 }
 
 function showFinishedScreen(data) {
+
+    // ✅ 클리어 화면은 무조건 라이트 테마
+    document.body.classList.add("theme-light");
+    // 혹시 남아있을 수 있는 페이드 클래스 정리(안전)
+    document.body.classList.remove("fade-start");
+    document.body.classList.remove("fade-reveal");
+    document.body.classList.remove("theme-fade");
+
+
     isFinished = true;
 
     if (typeof data.currentStage === "number") {
@@ -213,20 +227,31 @@ function showFinishedScreen(data) {
     saveFinishedState({
         currentStage: typeof data.currentStage === "number" ? data.currentStage : maxUnlockedStage,
         message: data.message || "모든 문제를 클리어했습니다!",
-        //clearImageUrl: data.clearImageUrl || "/img/clear.png",
-        clearImageUrl: data.clearImageUrl || "",
+        clearImageUrl: data.clearImageUrl || "/img/clear.png",
     });
 
     stageInfoEl.textContent = "";
     titleEl.textContent = "게임 클리어!";
 
     imgEl.style.display = "block";
-    //imgEl.src = data.clearImageUrl || "/img/clear.png";
-    imgEl.src = data.clearImageUrl || "";
+    imgEl.src = data.clearImageUrl || "/img/clear.png";
     descEl.textContent = "";
     resultEl.textContent = "";
-    finishEl.textContent =
-        data.message || "모든 문제를 클리어했습니다!";
+    // ✅ 클리어 문구에 이름 + 닉네임 표시
+    const playerName = localStorage.getItem("escapePlayerName") || "";
+    const nick = nickname || localStorage.getItem("escapeNickname") || "";
+
+    let titleLine = "축하드립니다!";
+    if (playerName || nick) {
+        titleLine = `[ ${playerName}${playerName && nick ? " - " : ""}${nick} ] 님 축하드립니다`;
+    }
+
+    finishEl.innerHTML = `
+    <div style="line-height: 1.6;">
+        <strong>${titleLine}</strong><br/>
+        ${data.message || "모든 문제를 클리어했습니다!"}
+    </div>
+`;
 
     inputRow.style.display = "none";
     answerInput.disabled = true;
