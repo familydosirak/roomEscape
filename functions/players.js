@@ -15,7 +15,7 @@ function getDb() {
     return getFirestore(); // index.js에서 초기화된 default app 기준
 }
 
-const PLAYER_MODE_ENABLED = true;
+const PLAYER_MODE_ENABLED = false;
 
 /**
  * 참가자 선등록 모드일 때, 해당 sessionId가 유효한지 검사
