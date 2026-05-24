@@ -29,8 +29,16 @@ let prevRacePositions = {};
 
 let raceHorseMap = {}; // 기존 말 DOM 재사용
 
+// ✅ 관리자 비밀번호 입력 모드
+// false = 비밀번호 입력 없이 관리자 페이지 바로 진입
+// true  = 기존처럼 비밀번호 입력 후 진입
+const ADMIN_PASSWORD_REQUIRED = false;
+
 let adminPassword = "";
-const AUTO_REFRESH_MS = 15000;
+
+// ✅ 자동 새로고침 1분
+const AUTO_REFRESH_MS = 60000;
+
 let autoTimer = null;
 let isLoading = false;
 
@@ -54,7 +62,6 @@ function formatStageLabel(stage) {
     return `${n - 1}번`;            // 1->0, 2->1, ... 6->5
 }
 
-
 function ensureTooltipEl() {
     if (tooltipEl) return tooltipEl;
     tooltipEl = document.createElement("div");
@@ -66,6 +73,7 @@ function ensureTooltipEl() {
 function showTooltipFor(target) {
     const text = target.getAttribute("data-tooltip");
     if (!text) return;
+
     const el = ensureTooltipEl();
     el.textContent = text;
 
@@ -102,7 +110,6 @@ function renderStats(stages) {
 
         const tdStage = document.createElement("td");
         tdStage.textContent = formatStageLabel(s.stage);
-
         tr.appendChild(tdStage);
 
         const tdCleared = document.createElement("td");
@@ -134,6 +141,7 @@ function renderStats(stages) {
                 tag.setAttribute("data-tooltip", rest.join(", "));
                 wrap.appendChild(tag);
             }
+
             tdNames.appendChild(wrap);
         } else {
             const no = document.createElement("span");
@@ -247,7 +255,7 @@ function buildGlobalRunners(stages) {
 }
 
 /* =========================================================
-   4. 🐎 경마 렌더링 (추월 애니메이션 완성본)
+   4. 🐎 경마 렌더링
    ========================================================= */
 
 function renderRaceGlobal(stages) {
@@ -366,19 +374,24 @@ async function loadStats() {
     statusEl.textContent = "통계 불러오는 중...";
 
     try {
-        if (!adminPassword) {
+        if (ADMIN_PASSWORD_REQUIRED && !adminPassword) {
             showLockScreen();
             return;
         }
 
-        const res = await fetch("/api/admin/stats", {
-            headers: {
-                "X-Admin-Password": adminPassword,
-            },
-        });
+        const headers = ADMIN_PASSWORD_REQUIRED
+            ? { "X-Admin-Password": adminPassword }
+            : {};
+
+        const res = await fetch("/api/admin/stats", { headers });
 
         if (res.status === 401) {
-            showLockScreen();
+            if (ADMIN_PASSWORD_REQUIRED) {
+                showLockScreen();
+            } else {
+                statusEl.textContent =
+                    "서버에서 관리자 비밀번호를 요구하고 있습니다. functions 쪽 관리자 비밀번호 검증도 꺼야 합니다.";
+            }
             return;
         }
 
@@ -404,16 +417,25 @@ async function loadStats() {
 async function resetStats() {
     if (!confirm("정말 초기화할까요? 모든 사람이 1번부터 다시 시작합니다.")) return;
 
+    const headers = {
+        "Content-Type": "application/json",
+    };
+
+    if (ADMIN_PASSWORD_REQUIRED) {
+        headers["X-Admin-Password"] = adminPassword;
+    }
+
     const res = await fetch("/api/admin/resetStats", {
         method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-Admin-Password": adminPassword,
-        },
+        headers,
     });
 
     if (res.status === 401) {
-        showLockScreen();
+        if (ADMIN_PASSWORD_REQUIRED) {
+            showLockScreen();
+        } else {
+            alert("서버에서 관리자 비밀번호를 요구하고 있습니다. functions 쪽 관리자 비밀번호 검증도 꺼야 합니다.");
+        }
         return;
     }
 
@@ -435,8 +457,10 @@ function showLockScreen() {
     adminContent.classList.add("hidden");
     lockOverlay.classList.remove("hidden");
 
-    adminPwdInput.value = "";
-    adminPwdInput.focus();
+    if (adminPwdInput) {
+        adminPwdInput.value = "";
+        adminPwdInput.focus();
+    }
 }
 
 async function handleAdminLogin() {
@@ -492,11 +516,9 @@ function stopAutoRefresh() {
     autoTimer = null;
 }
 
-
 /* =========================================================
    7. 명단관리
    ========================================================= */
-
 
 function parsePlayersCsv(text) {
     const lines = text
@@ -539,7 +561,7 @@ function parsePlayersCsv(text) {
 }
 
 async function exportPlayersCsv() {
-    if (!adminPassword) {
+    if (ADMIN_PASSWORD_REQUIRED && !adminPassword) {
         showLockScreen();
         return;
     }
@@ -547,14 +569,19 @@ async function exportPlayersCsv() {
     try {
         playersImportStatus.textContent = "참가자 명단 내려받는 중...";
 
-        const res = await fetch("/api/admin/playersExport", {
-            headers: {
-                "X-Admin-Password": adminPassword,
-            },
-        });
+        const headers = ADMIN_PASSWORD_REQUIRED
+            ? { "X-Admin-Password": adminPassword }
+            : {};
+
+        const res = await fetch("/api/admin/playersExport", { headers });
 
         if (res.status === 401) {
-            showLockScreen();
+            if (ADMIN_PASSWORD_REQUIRED) {
+                showLockScreen();
+            } else {
+                playersImportStatus.textContent =
+                    "서버에서 관리자 비밀번호를 요구하고 있습니다. functions 쪽 관리자 비밀번호 검증도 꺼야 합니다.";
+            }
             return;
         }
 
@@ -592,7 +619,7 @@ function handlePlayersFileChange(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!adminPassword) {
+    if (ADMIN_PASSWORD_REQUIRED && !adminPassword) {
         showLockScreen();
         playersFileInput.value = "";
         return;
@@ -615,17 +642,27 @@ function handlePlayersFileChange(e) {
             playersImportStatus.textContent =
                 "서버로 업로드 중...";
 
+            const headers = {
+                "Content-Type": "application/json",
+            };
+
+            if (ADMIN_PASSWORD_REQUIRED) {
+                headers["X-Admin-Password"] = adminPassword;
+            }
+
             const res = await fetch("/api/admin/playersImport", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-Admin-Password": adminPassword,
-                },
+                headers,
                 body: JSON.stringify({ players }),
             });
 
             if (res.status === 401) {
-                showLockScreen();
+                if (ADMIN_PASSWORD_REQUIRED) {
+                    showLockScreen();
+                } else {
+                    playersImportStatus.textContent =
+                        "서버에서 관리자 비밀번호를 요구하고 있습니다. functions 쪽 관리자 비밀번호 검증도 꺼야 합니다.";
+                }
                 return;
             }
 
@@ -658,7 +695,6 @@ function handlePlayersFileChange(e) {
     reader.readAsText(file, "utf-8");
 }
 
-
 /* =========================================================
    8. 이벤트
    ========================================================= */
@@ -666,17 +702,22 @@ function handlePlayersFileChange(e) {
 refreshBtn.addEventListener("click", loadStats);
 resetBtn.addEventListener("click", resetStats);
 
-adminLoginBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    handleAdminLogin();
-});
-
-adminPwdInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
+if (adminLoginBtn) {
+    adminLoginBtn.addEventListener("click", (e) => {
         e.preventDefault();
         handleAdminLogin();
-    }
-});
+    });
+}
+
+if (adminPwdInput) {
+    adminPwdInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleAdminLogin();
+        }
+    });
+}
+
 if (playersExportBtn) {
     playersExportBtn.addEventListener("click", (e) => {
         e.preventDefault();
@@ -688,3 +729,20 @@ if (playersFileInput) {
     playersFileInput.addEventListener("change", handlePlayersFileChange);
 }
 
+/* =========================================================
+   9. 초기 진입
+   ========================================================= */
+
+function initAdminPage() {
+    if (ADMIN_PASSWORD_REQUIRED) {
+        showLockScreen();
+        return;
+    }
+
+    // ✅ 비밀번호 입력 없이 바로 관리자 화면 표시
+    showAdminContent();
+    loadStats();
+    startAutoRefresh();
+}
+
+initAdminPage();
