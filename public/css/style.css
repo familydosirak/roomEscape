@@ -736,3 +736,44 @@ html,
 body {
     touch-action: manipulation;
 }
+
+#show-answer-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #fbbf24;
+  color: #111827;
+}
+
+#show-answer-btn:hover {
+  filter: brightness(1.05);
+}
+
+.test-answer-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+#show-answer-btn,
+#force-correct-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#show-answer-btn {
+  background: #fbbf24;
+  color: #111827;
+}
+
+#force-correct-btn {
+  background: #4ade80;
+  color: #052e16;
+}

@@ -25,6 +25,13 @@ const nicknameRegex = /^[가-힣a-zA-Z0-9_ ]+$/; // 닉네임 정규식: 한글,
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "mensaparty2025"; // 원하는 비번으로 변경
 
+// ✅ false = 관리자 API 비밀번호 검사 안 함 / true = 기존처럼 비밀번호 검사
+const ADMIN_PASSWORD_REQUIRED = false;
+
+// ✅ 테스트용 정답보기 모드
+// true  = 클라이언트에 정답 내려줌
+// false = 실제 행사 모드, 정답 안 내려줌
+const TEST_ANSWER_VIEW_ENABLED = true;
 
 
 console.log("### PLAYER_MODE_ENABLED =", PLAYER_MODE_ENABLED);
@@ -277,7 +284,7 @@ exports.problem = onRequest(
             }
             payload.arrivalRank = await getStageClearCount(stage);
 
-            if (isCleared) {
+            if (isCleared || TEST_ANSWER_VIEW_ENABLED) {
                 payload.answer = problem.answer;
             }
 
@@ -478,6 +485,9 @@ exports.answer = onRequest(
                 description: nextProblem.description,
             };
 
+            if (TEST_ANSWER_VIEW_ENABLED) {
+                nextProblemPayload.answer = nextProblem.answer;
+            }
             if (nextProblem.options) {
                 nextProblemPayload.options = nextProblem.options;
             }
@@ -819,15 +829,18 @@ exports.adminStats = onRequest(
 
         try {
 
-            const pwd =
-                req.get("x-admin-password") || // 헤더 우선
-                (req.query.adminPassword || "").toString(); // 혹시 쿼리로 보낼 경우 대비
+            if (ADMIN_PASSWORD_REQUIRED) {
+                const pwd =
+                    req.get("x-admin-password") || // 헤더 우선
+                    (req.query.adminPassword || "").toString(); // 혹시 쿼리로 보낼 경우 대비
 
-            if (pwd !== ADMIN_PASSWORD) {
-                return res
-                    .status(401)
-                    .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                if (pwd !== ADMIN_PASSWORD) {
+                    return res
+                        .status(401)
+                        .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                }
             }
+
             // 🔹 1) 전체 문제 중 마지막 스테이지 번호 계산
             const maxStage = problems.reduce((max, p) => {
                 const s = Number(p.stage || 0);
@@ -955,14 +968,16 @@ exports.adminPlayersExport = onRequest(
         }
 
         try {
-            const pwd =
-                req.get("x-admin-password") ||
-                (req.query.adminPassword || "").toString();
+            if (ADMIN_PASSWORD_REQUIRED) {
+                const pwd =
+                    req.get("x-admin-password") ||
+                    (req.query.adminPassword || "").toString();
 
-            if (pwd !== ADMIN_PASSWORD) {
-                return res
-                    .status(401)
-                    .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                if (pwd !== ADMIN_PASSWORD) {
+                    return res
+                        .status(401)
+                        .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                }
             }
 
             const snap = await playersRef.get();
@@ -1059,14 +1074,16 @@ exports.adminPlayersImport = onRequest(
         }
 
         try {
-            const pwd =
-                req.get("x-admin-password") ||
-                (req.query.adminPassword || "").toString();
+            if (ADMIN_PASSWORD_REQUIRED) {
+                const pwd =
+                    req.get("x-admin-password") ||
+                    (req.query.adminPassword || "").toString();
 
-            if (pwd !== ADMIN_PASSWORD) {
-                return res
-                    .status(401)
-                    .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                if (pwd !== ADMIN_PASSWORD) {
+                    return res
+                        .status(401)
+                        .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                }
             }
 
             const body = req.body || {};
@@ -1158,14 +1175,16 @@ exports.adminResetStats = onRequest(
         }
 
         try {
-            const pwd =
-                req.get("x-admin-password") ||
-                (req.query.adminPassword || "").toString();
+            if (ADMIN_PASSWORD_REQUIRED) {
+                const pwd =
+                    req.get("x-admin-password") ||
+                    (req.query.adminPassword || "").toString();
 
-            if (pwd !== ADMIN_PASSWORD) {
-                return res
-                    .status(401)
-                    .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                if (pwd !== ADMIN_PASSWORD) {
+                    return res
+                        .status(401)
+                        .json({ ok: false, message: "관리자 비밀번호가 올바르지 않습니다." });
+                }
             }
 
             const batch = db.batch();

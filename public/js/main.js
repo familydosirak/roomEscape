@@ -92,6 +92,8 @@ let wrongHintText = null;
 let wrongHintStage = null;
 let currentProblemCtxCleanup = null;
 let currentProblemType = "INPUT";
+let currentProblemAnswer = "";
+
 
 // 🔥 쿨타임 상태 저장/복구
 function saveCooldownState() {
@@ -168,6 +170,9 @@ const imgEl = document.getElementById("problem-image");
 const descEl = document.getElementById("problem-desc");
 const answerInput = document.getElementById("answer-input");
 const submitBtn = document.getElementById("submit-btn");
+const testAnswerRow = document.getElementById("test-answer-row");
+const showAnswerBtn = document.getElementById("show-answer-btn");
+const forceCorrectBtn = document.getElementById("force-correct-btn");
 const resultEl = document.getElementById("result-message");
 const finishEl = document.getElementById("finish-message");
 const prevBtn = document.getElementById("prev-btn");
@@ -376,6 +381,11 @@ function renderProblem(problem, options = {}) {
 
     currentStage = problem.stage;
     currentProblemType = (problem.type || "INPUT").toUpperCase();
+    currentProblemAnswer = problem.answer || "";
+
+    if (testAnswerRow) {
+        testAnswerRow.style.display = "flex";
+    }
 
     applyStageThemeWithFade(problem.stage);
 
@@ -433,6 +443,7 @@ function renderProblem(problem, options = {}) {
         inputRow.style.display = "flex";
         answerInput.disabled = true;
         submitBtn.disabled = true;
+        if (forceCorrectBtn) forceCorrectBtn.disabled = true;
         if (problem.answer) {
             answerInput.value = problem.answer;
         } else {
@@ -477,6 +488,7 @@ function renderProblem(problem, options = {}) {
 
             answerInput.disabled = false;
             submitBtn.disabled = false;
+            if (forceCorrectBtn) forceCorrectBtn.disabled = false;
             resultEl.textContent = "";
             answerInput.focus();
         }
@@ -1037,6 +1049,33 @@ if (nicknameChangeBtn) {
 
 
 submitBtn.addEventListener("click", () => submitAnswer());
+
+if (showAnswerBtn) {
+    showAnswerBtn.addEventListener("click", () => {
+        if (!currentProblemAnswer) {
+            resultEl.style.color = "#f97373";
+            resultEl.textContent = "현재 문제의 정답 정보가 없습니다.";
+            return;
+        }
+
+        answerInput.value = currentProblemAnswer;
+        resultEl.style.color = "#fbbf24";
+        resultEl.textContent = `정답: ${currentProblemAnswer}`;
+    });
+}
+
+if (forceCorrectBtn) {
+    forceCorrectBtn.addEventListener("click", () => {
+        if (!currentProblemAnswer) {
+            resultEl.style.color = "#f97373";
+            resultEl.textContent = "현재 문제의 정답 정보가 없습니다.";
+            return;
+        }
+
+        answerInput.value = currentProblemAnswer;
+        submitAnswer(currentProblemAnswer);
+    });
+}
 
 answerInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {

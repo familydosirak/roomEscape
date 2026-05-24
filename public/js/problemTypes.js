@@ -47,8 +47,8 @@
 
 
     /**
-     * 기본 INPUT 형식 (현재 사용중인 텍스트 입력형)
-     */
+  * 기본 INPUT 형식 (현재 사용중인 텍스트 입력형)
+  */
     function setupInput(problem, ctx) {
         cleanupPrev(ctx);
 
@@ -57,12 +57,38 @@
         ctx.answerInput.disabled = false;
         ctx.submitBtn.disabled = false;
         ctx.answerInput.placeholder = "정답을 입력하세요";
-        // value는 main.js에서 관리하므로 여기선 건드리지 않아도 됨
 
         ctx.resultEl.textContent = "";
 
+        // ✅ HTML에 이미 있는 정답처리 버튼 사용
+        const forceCorrectBtn = document.getElementById("force-correct-btn");
+
+        if (forceCorrectBtn) {
+            forceCorrectBtn.style.display = "inline-block";
+            forceCorrectBtn.classList.remove("hidden");
+            forceCorrectBtn.disabled = false;
+
+            forceCorrectBtn.onclick = () => {
+                if (!problem.answer) {
+                    ctx.resultEl.style.color = "#f97373";
+                    ctx.resultEl.textContent = "현재 문제의 정답 정보가 없습니다.";
+                    return;
+                }
+
+                ctx.answerInput.value = problem.answer;
+
+                if (typeof ctx.submitAnswer === "function") {
+                    ctx.submitAnswer(problem.answer);
+                }
+            };
+        }
+
         ctx._cleanup = function () {
-            // 특별히 정리할 것은 없음
+            const btn = document.getElementById("force-correct-btn");
+            if (btn) {
+                btn.style.display = "none";
+                btn.onclick = null;
+            }
         };
     }
 
@@ -975,7 +1001,9 @@
 
         const type = (problem.type || "INPUT").toUpperCase();
 
-        if (type === "TAP") {
+        if (type === "INPUT") {
+            setupInput(problem, ctx);
+        } else if (type === "TAP") {
             setupTap(problem, ctx);
         } else if (type === "CHOICE") {
             setupChoice(problem, ctx);
